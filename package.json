@@ -5,13 +5,13 @@
   "main": "electron.js",
   "homepage": "./",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 3000",
     "build": "vite build",
     "build-dist": "vite build && npm run build-electron",
     "build-electron": "npm run build && electron-builder --win",
     "electron": "electron .",
     "dev-electron": "concurrently npm:dev npm:electron-wait",
-    "electron-wait": "wait-on http://localhost:5173 && electron . --enable-logging",
+    "electron-wait": "wait-on http://localhost:3000 && npm run electron",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
