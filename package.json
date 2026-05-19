@@ -49,17 +49,14 @@
   "build": {
     "appId": "com.100egabus.app",
     "productName": "100EGABUS",
+    "asar": false,
     "files": [
       "dist/**/*",
       "electron.js",
-      "preload-cjs.js",
-      "node_modules/**/*"
+      "preload-cjs.js"
     ],
     "directories": {
       "buildResources": "public"
-    },
-    "extraMetadata": {
-      "main": "electron.js"
     },
     "win": {
       "target": [

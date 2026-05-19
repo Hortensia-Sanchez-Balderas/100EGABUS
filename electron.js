@@ -21,9 +21,13 @@ function createWindow() {
 
   mainWindow.loadURL(startUrl);
 
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
+  // Always open DevTools for debugging
+  mainWindow.webContents.openDevTools();
+  
+  // Log any console messages
+  mainWindow.webContents.on('console-message', (level, message, line, sourceId) => {
+    console.log(`[Console] ${message}`);
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
