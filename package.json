@@ -51,12 +51,15 @@
     "productName": "100EGABUS",
     "files": [
       "dist/**/*",
-      "electron-main.js",
-      "preload.js",
+      "electron.js",
+      "preload-cjs.js",
       "node_modules/**/*"
     ],
     "directories": {
       "buildResources": "public"
+    },
+    "extraMetadata": {
+      "main": "electron.js"
     },
     "win": {
       "target": [
