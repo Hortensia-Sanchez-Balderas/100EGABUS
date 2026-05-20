@@ -30,10 +30,20 @@ function createWindow() {
       mainWindow.loadFile(indexPath);
     }
 
+    // Abrir DevTools siempre para ver errores
     mainWindow.webContents.openDevTools();
     
     mainWindow.webContents.on('console-message', (level, message, line, sourceId) => {
       console.log(`[Console] ${message}`);
+    });
+
+    // Mostrar errores de la app
+    mainWindow.webContents.on('crashed', () => {
+      console.error('Renderer process crashed!');
+    });
+
+    mainWindow.webContents.on('unresponsive', () => {
+      console.error('Renderer process unresponsive!');
     });
 
     mainWindow.on('closed', () => {

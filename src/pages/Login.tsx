@@ -49,7 +49,6 @@ export default function Login() {
               <Bus className="text-white" size={28} />
             </div>
             <div className="text-left">
-              <h1 className="text-2xl font-bold text-white tracking-wide">100EGABUS</h1>
               <p className="text-green-300 text-xs font-medium tracking-wider uppercase">Sistema de Gestión de Transporte</p>
             </div>
           </div>
