@@ -17,8 +17,19 @@ interface Student {
   fecha_registro: string;
 }
 
+interface Stop {
+  id: string;
+  nombre: string;
+  ubicacion: string;
+  coordenadas: string;
+  ruta: string;
+  capacidad: number;
+  estado: 'activa' | 'inactiva';
+}
+
 export function Students() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [stops, setStops] = useState<Stop[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -38,7 +49,26 @@ export function Students() {
 
   useEffect(() => {
     loadStudents();
+    loadStops();
   }, []);
+
+  const loadStops = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('paradas')
+        .select('*')
+        .eq('estado', 'activa')
+        .order('nombre', { ascending: true });
+
+      if (error) {
+        console.error('Error loading stops:', error);
+      } else {
+        setStops(data || []);
+      }
+    } catch (error) {
+      console.error('Error loading stops:', error);
+    }
+  };
 
   const loadStudents = async () => {
     setLoading(true);
@@ -86,6 +116,7 @@ export function Students() {
       horario_ida: '',
       horario_regreso: '',
     });
+    loadStops(); // Recargar paradas cuando se abre el modal
     setShowModal(true);
   };
 
@@ -101,6 +132,7 @@ export function Students() {
       horario_ida: student.horario_ida || '',
       horario_regreso: student.horario_regreso || '',
     });
+    loadStops(); // Recargar paradas cuando se abre el modal
     setShowModal(true);
   };
 
@@ -521,12 +553,11 @@ export function Students() {
                   className="w-full px-4 py-2 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="Centro">Centro</option>
-                  <option value="Universidad">Universidad</option>
-                  <option value="CBTIS">CBTIS</option>
-                  <option value="Preparatoria">Preparatoria</option>
-                  <option value="Plaza Principal">Plaza Principal</option>
-                  <option value="Col. Linda Vista">Col. Linda Vista</option>
+                  {stops.map((stop) => (
+                    <option key={stop.id} value={stop.nombre}>
+                      {stop.nombre}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
