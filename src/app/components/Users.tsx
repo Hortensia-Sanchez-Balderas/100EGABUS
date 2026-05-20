@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, projectId, publicAnonKey } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { UserPlus, Users as UsersIcon, Edit2, Trash2, Lock, CheckCircle, XCircle, Search } from 'lucide-react';
 
 
