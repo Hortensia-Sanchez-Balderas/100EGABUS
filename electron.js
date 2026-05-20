@@ -3,49 +3,75 @@ const path = require('path');
 
 let mainWindow;
 
+console.log('Electron main process starting...');
+
 function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload-cjs.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
+  try {
+    console.log('Creating window...');
+    mainWindow = new BrowserWindow({
+      width: 1200,
+      height: 800,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload-cjs.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
 
-  const isDev = !app.isPackaged;
-  const startUrl = isDev
-    ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, 'dist/index.html')}`;
+    const isDev = !app.isPackaged;
+    console.log('isDev:', isDev);
+    
+    if (isDev) {
+      console.log('Loading dev server: http://localhost:3000');
+      mainWindow.loadURL('http://localhost:3000');
+    } else {
+      const indexPath = path.join(__dirname, 'dist/index.html');
+      console.log('Loading file:', indexPath);
+      mainWindow.loadFile(indexPath);
+    }
 
-  mainWindow.loadURL(startUrl);
+    mainWindow.webContents.openDevTools();
+    
+    mainWindow.webContents.on('console-message', (level, message, line, sourceId) => {
+      console.log(`[Console] ${message}`);
+    });
 
-  // Always open DevTools for debugging
-  mainWindow.webContents.openDevTools();
-  
-  // Log any console messages
-  mainWindow.webContents.on('console-message', (level, message, line, sourceId) => {
-    console.log(`[Console] ${message}`);
-  });
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+    mainWindow.on('closed', () => {
+      console.log('Window closed');
+      mainWindow = null;
+    });
+    
+    console.log('Window created successfully');
+  } catch (err) {
+    console.error('Error creating window:', err);
+  }
 }
 
-app.on('ready', createWindow);
+app.on('ready', () => {
+  try {
+    console.log('App ready event fired');
+    createWindow();
+  } catch (err) {
+    console.error('Error in ready event:', err);
+  }
+});
 
 app.on('window-all-closed', () => {
+  console.log('Window all closed');
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
 app.on('activate', () => {
+  console.log('Activate event');
   if (mainWindow === null) {
     createWindow();
   }
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
 });
 
 const template = [
@@ -78,3 +104,5 @@ const template = [
 
 const menu = Menu.buildFromTemplate(template);
 Menu.setApplicationMenu(menu);
+
+console.log('Electron main process setup complete');

@@ -30,18 +30,29 @@ export default function App() {
   const [adminView, setAdminView] = useState<AdminView>('dashboard');
   const [operatorView, setOperatorView] = useState<OperatorView>('welcome');
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Changed to false - skip auto-session check
 
-  // Verificar sesión al cargar la app
+  // No realizar verificación automática de sesión
+  // Ya que Supabase puede no estar configurado
   useEffect(() => {
-    checkSession();
+    setLoading(false);
   }, []);
 
   const checkSession = async () => {
     try {
-      const { data: { session }, error } = await supabase.auth.getSession();
+      // Timeout de 5 segundos para no quedar colgado
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Session check timeout')), 5000)
+      );
+
+      const sessionPromise = supabase.auth.getSession();
+      const { data: { session }, error } = await Promise.race([
+        sessionPromise,
+        timeoutPromise as any
+      ]) as any;
 
       if (error || !session) {
+        console.log('No active session');
         setLoading(false);
         return;
       }
@@ -67,6 +78,7 @@ export default function App() {
       }
     } catch (error) {
       console.error('Error checking session:', error);
+      // No bloquear si hay error - mostrar login
     } finally {
       setLoading(false);
     }

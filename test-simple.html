@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>100EGABUS - Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      background-color: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      max-width: 600px;
+      text-align: center;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+      font-size: 32px;
+    }
+    .status {
+      background-color: #e8f5e9;
+      border-left: 4px solid #4caf50;
+      padding: 15px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    .status p {
+      margin: 5px 0;
+      color: #2e7d32;
+      font-size: 14px;
+    }
+    .info {
+      background-color: #f0f0f0;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+      text-align: left;
+    }
+    .info code {
+      background-color: #e0e0e0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚌 100EGABUS</h1>
+    <h2 style="color: #666; margin-bottom: 20px;">Test HTML Puro</h2>
+    
+    <div class="status">
+      <p>✓ HTML cargado correctamente</p>
+      <p>✓ JavaScript ejecutándose</p>
+      <p>✓ Electron funcionando</p>
+    </div>
+    
+    <div class="info">
+      <h3 style="margin-bottom: 10px;">Información del Sistema</h3>
+      <p><strong>Navegador:</strong> <code id="userAgent"></code></p>
+      <p><strong>Plataforma:</strong> <code id="platform"></code></p>
+      <p><strong>Tiempo de carga:</strong> <code id="loadTime"></code>ms</p>
+    </div>
+    
+    <div style="margin: 20px 0;">
+      <button onclick="testReact()">Test React</button>
+      <button onclick="testConsole()">Test Consola</button>
+      <button onclick="location.reload()">Recargar</button>
+    </div>
+    
+    <div id="result" style="margin-top: 20px; min-height: 40px;"></div>
+  </div>
+
+  <script>
+    // Información del sistema
+    const userAgent = navigator.userAgent.substring(0, 50) + '...';
+    document.getElementById('userAgent').textContent = userAgent;
+    document.getElementById('platform').textContent = navigator.platform;
+    
+    const loadTime = Date.now() - performance.timing.navigationStart;
+    document.getElementById('loadTime').textContent = loadTime;
+    
+    console.log('=== 100EGABUS HTML Test ===');
+    console.log('HTML cargado');
+    console.log('Usuario Agent:', navigator.userAgent);
+    
+    function testReact() {
+      const result = document.getElementById('result');
+      result.innerHTML = '<p style="color: #007bff;">Buscando archivo React...</p>';
+      console.log('Test React - intentando cargar app.tsx');
+      
+      // Aquí intentaría cargar React
+      fetch('./dist/index.html')
+        .then(r => r.text())
+        .then(text => {
+          result.innerHTML = '<p style="color: #4caf50;">✓ App disponible</p>';
+          console.log('React app encontrado');
+        })
+        .catch(err => {
+          result.innerHTML = '<p style="color: #f44336;">✗ Error: ' + err.message + '</p>';
+          console.error('Error cargando React:', err);
+        });
+    }
+    
+    function testConsole() {
+      const result = document.getElementById('result');
+      result.innerHTML = '<p style="color: #4caf50;">Abre DevTools (F12) para ver los logs</p>';
+      console.log('=== TEST CONSOLE ===');
+      console.log('1. HTML base funcionando');
+      console.log('2. JavaScript ejecutándose');
+      console.log('3. Electron integrado');
+      console.log('===================');
+    }
+  </script>
+</body>
+</html>
