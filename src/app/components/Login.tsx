@@ -79,9 +79,9 @@ export function Login({ onLogin }: LoginProps) {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <img 
-              src="/images/logo.png" 
+              src="/images/logo100bus2.png" 
               alt="100EGABUS Logo" 
-              className="w-16 h-16 object-contain"
+              className="h-20 object-contain"
               onError={(e) => {
                 // Fallback si la imagen no existe
                 (e.target as HTMLImageElement).style.display = 'none';
