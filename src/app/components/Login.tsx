@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Bus, Lock, Mail, AlertCircle } from 'lucide-react';
+import { Lock, Mail, AlertCircle } from 'lucide-react';
 
 
 interface LoginProps {
@@ -78,7 +78,15 @@ export function Login({ onLogin }: LoginProps) {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <Bus className="w-16 h-16 text-emerald-600" />
+            <img 
+              src="/images/logo.png" 
+              alt="100EGABUS Logo" 
+              className="w-16 h-16 object-contain"
+              onError={(e) => {
+                // Fallback si la imagen no existe
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
           </div>
           <h1 className="text-5xl font-bold text-emerald-800 mb-3">100EGABUS</h1>
           <p className="text-xl text-gray-600">Sistema de Gestión de Transporte Estudiantil</p>
