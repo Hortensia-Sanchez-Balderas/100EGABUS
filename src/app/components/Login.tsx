@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Lock, Mail, AlertCircle } from 'lucide-react';
+import logoImage from '../../assets/logo100bus2.png';
 
 
 interface LoginProps {
@@ -79,7 +80,7 @@ export function Login({ onLogin }: LoginProps) {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <img 
-              src="/images/logo100bus2.png" 
+              src={logoImage}
               alt="100EGABUS Logo" 
               className="h-20 object-contain"
               onError={(e) => {
