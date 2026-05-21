@@ -64,23 +64,29 @@ export function Dashboard() {
     }, [])
     .slice(0, 4);
 
-  // Simulated schedule data (would need more complex aggregation)
-  const demandBySchedule = [
-    { hora: '6:00', pasajeros: 120 },
-    { hora: '7:00', pasajeros: 180 },
-    { hora: '13:00', pasajeros: 95 },
-    { hora: '14:00', pasajeros: 145 },
-    { hora: '18:00', pasajeros: 160 },
-    { hora: '19:00', pasajeros: 110 },
-  ];
+  // Calculate demand by schedule from viajes
+  const demandBySchedule = viajes
+    .filter(viaje => viaje.hora_salida_real)
+    .reduce((acc: any[], viaje) => {
+      // Extract hour from time string (HH:MM format)
+      const hour = viaje.hora_salida_real.split(':')[0];
+      const existing = acc.find(d => d.hora === `${hour}:00`);
+      if (existing) {
+        existing.pasajeros += viaje.pasajeros || 0;
+      } else {
+        acc.push({ hora: `${hour}:00`, pasajeros: viaje.pasajeros || 0 });
+      }
+      return acc;
+    }, [])
+    .sort((a, b) => parseInt(a.hora) - parseInt(b.hora));
 
-  // Calculate weekly usage from trips
+  // Calculate weekly usage from trips - real data
   const weeklyUsage = [
-    { dia: 'Lun', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 1).length || 340 },
-    { dia: 'Mar', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 2).length || 355 },
-    { dia: 'Mié', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 3).length || 320 },
-    { dia: 'Jue', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 4).length || 365 },
-    { dia: 'Vie', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 5).length || 310 },
+    { dia: 'Lun', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 1).length },
+    { dia: 'Mar', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 2).length },
+    { dia: 'Mié', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 3).length },
+    { dia: 'Jue', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 4).length },
+    { dia: 'Vie', uso: viajes.filter(v => v.fecha && new Date(v.fecha).getDay() === 5).length },
   ];
 
   const activeStudents = estudiantes.filter(e => e.estado === 'activo').length;
@@ -89,6 +95,21 @@ export function Dashboard() {
   const avgOccupancy = viajes.length > 0
     ? Math.round((viajes.reduce((sum, v) => sum + (v.pasajeros || 0), 0) / viajes.length / 45) * 100)
     : 78;
+
+  // Calculate average trip duration from real data
+  const avgTripDuration = viajes.length > 0
+    ? Math.round(viajes.reduce((sum, v) => sum + (v.tiempo_recorrido || 0), 0) / viajes.length)
+    : 42;
+
+  // Calculate monthly fuel consumption
+  const monthlyFuelConsumption = viajes.length > 0
+    ? Math.round(viajes.reduce((sum, v) => sum + (v.gasolina_consumida || 0), 0))
+    : 4500;
+
+  // Calculate route efficiency based on schedule compliance
+  const routeEfficiency = viajes.length > 0
+    ? Math.round(((viajes.filter(v => (v.retraso || 0) <= 15).length / viajes.length) * 100))
+    : 87;
 
   if (loading) {
     return (
@@ -255,7 +276,7 @@ export function Dashboard() {
             <Clock className="w-8 h-8 text-emerald-600" />
             <div>
               <p className="text-sm text-gray-600">Tiempo Promedio de Recorrido</p>
-              <p className="text-2xl font-bold text-emerald-700">42 min</p>
+              <p className="text-2xl font-bold text-emerald-700">{avgTripDuration} min</p>
             </div>
           </div>
         </div>
@@ -266,9 +287,7 @@ export function Dashboard() {
             <div>
               <p className="text-sm text-gray-600">Consumo Estimado (Mensual)</p>
               <p className="text-2xl font-bold text-green-700">
-                {viajes.length > 0
-                  ? Math.round(viajes.reduce((sum, v) => sum + (v.gasolina_consumida || 0), 0)).toLocaleString()
-                  : '4,500'} L
+                {monthlyFuelConsumption.toLocaleString()} L
               </p>
             </div>
           </div>
@@ -279,7 +298,7 @@ export function Dashboard() {
             <TrendingUp className="w-8 h-8 text-teal-600" />
             <div>
               <p className="text-sm text-gray-600">Eficiencia de Ruta</p>
-              <p className="text-2xl font-bold text-teal-700">87%</p>
+              <p className="text-2xl font-bold text-teal-700">{routeEfficiency}%</p>
             </div>
           </div>
         </div>
