@@ -30,8 +30,10 @@ function createWindow() {
       mainWindow.loadFile(indexPath);
     }
 
-    // Abrir DevTools siempre para ver errores
-    mainWindow.webContents.openDevTools();
+    // No abrir DevTools en producción
+    if (isDev) {
+      mainWindow.webContents.openDevTools();
+    }
     
     mainWindow.webContents.on('console-message', (level, message, line, sourceId) => {
       console.log(`[Console] ${message}`);
