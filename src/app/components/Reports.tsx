@@ -1,32 +1,196 @@
-import { FileText, Download, TrendingUp, AlertCircle, CheckCircle, Calendar } from 'lucide-react';
+import { FileText, Download, TrendingUp, AlertCircle, CheckCircle, Calendar, Loader } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
 
-const monthlyTrend = [
-  { mes: 'Ene', usuarios: 980, viajes: 4200, costo: 38000 },
-  { mes: 'Feb', usuarios: 1050, viajes: 4500, costo: 39500 },
-  { mes: 'Mar', usuarios: 1120, viajes: 4800, costo: 41000 },
-  { mes: 'Abr', usuarios: 1180, viajes: 5100, costo: 43500 },
-  { mes: 'May', usuarios: 1247, viajes: 5400, costo: 45000 },
-];
+interface MonthlyData {
+  mes: string;
+  usuarios: number;
+  viajes: number;
+  costo: number;
+}
 
-const routeEfficiency = [
-  { ruta: 'Ruta 1', eficiencia: 87, usuarios: 420, kmRecorrido: 45 },
-  { ruta: 'Ruta 2', eficiencia: 82, usuarios: 350, kmRecorrido: 38 },
-  { ruta: 'Ruta 3', eficiencia: 75, usuarios: 280, kmRecorrido: 42 },
-  { ruta: 'Ruta 4', eficiencia: 68, usuarios: 197, kmRecorrido: 35 },
-];
+interface RouteData {
+  ruta: string;
+  eficiencia: number;
+  usuarios: number;
+  kmRecorrido: number;
+}
 
-const topStops = [
-  { parada: 'Universidad', demanda: 78, tendencia: '+12%' },
-  { parada: 'CBTIS', demanda: 62, tendencia: '+8%' },
-  { parada: 'Preparatoria', demanda: 55, tendencia: '+5%' },
-  { parada: 'Centro', demanda: 45, tendencia: '-2%' },
-  { parada: 'Col. Linda Vista', demanda: 41, tendencia: '+3%' },
-];
+interface StopData {
+  parada: string;
+  demanda: number;
+  tendencia: string;
+}
+
+interface Recommendation {
+  tipo: string;
+  condicion: string;
+  accion: string;
+  prioridad: string;
+  estado: string;
+  impacto: string;
+}
 
 export function Reports() {
-  const handleDownloadReport = (reportType: string) => {
-    alert(`Descargando reporte: ${reportType}`);
+  const [monthlyTrend, setMonthlyTrend] = useState<MonthlyData[]>([]);
+  const [routeEfficiency, setRouteEfficiency] = useState<RouteData[]>([]);
+  const [topStops, setTopStops] = useState<StopData[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [insights, setInsights] = useState({
+    growth: 0,
+    lowestRoute: { name: '', efficiency: 100 },
+    topStop: { name: '', trend: 0 }
+  });
+
+  useEffect(() => {
+    loadReportsData();
+  }, []);
+
+  const loadReportsData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load viajes for monthly trend and costs
+      const { data: viajes } = await supabase.from('viajes').select('*');
+      const { data: rutas } = await supabase.from('rutas').select('*');
+      const { data: paradas } = await supabase.from('paradas').select('*');
+      const { data: optimizaciones } = await supabase.from('optimizaciones').select('*').eq('estado', 'sugerencia');
+
+      // Calculate monthly trend
+      if (viajes) {
+        const monthMap: { [key: string]: { usuarios: number; viajes: number; costo: number } } = {};
+        const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        
+        viajes.forEach(viaje => {
+          const date = new Date(viaje.fecha);
+          const monthIndex = date.getMonth();
+          const monthName = months[monthIndex];
+          
+          if (!monthMap[monthName]) {
+            monthMap[monthName] = { usuarios: new Set().size, viajes: 0, costo: 0 };
+          }
+          monthMap[monthName].viajes++;
+          monthMap[monthName].costo += (viaje.gasolina_consumida || 0) * 25; // Estimado 25 MXN por litro
+        });
+
+        // Calculate unique users per month
+        const trendData = months.map(mes => {
+          const studentsThisMonth = viajes
+            .filter(v => new Date(v.fecha).getMonth() === months.indexOf(mes))
+            .filter((v, idx, arr) => arr.findIndex(a => a.estudiante === v.estudiante) === idx).length;
+          
+          return {
+            mes,
+            usuarios: studentsThisMonth || monthMap[mes]?.usuarios || 0,
+            viajes: monthMap[mes]?.viajes || 0,
+            costo: Math.round(monthMap[mes]?.costo || 0)
+          };
+        }).filter(m => m.viajes > 0);
+
+        setMonthlyTrend(trendData);
+      }
+
+      // Calculate route efficiency
+      if (rutas) {
+        const routeStats = rutas.map(ruta => {
+          const rutaViajes = viajes?.filter((v: any) => v.ruta === ruta.nombre) || [];
+          const onTimeViajes = rutaViajes.filter((v: any) => (v.retraso || 0) <= 15).length;
+          const eficiencia = rutaViajes.length > 0 ? Math.round((onTimeViajes / rutaViajes.length) * 100) : 0;
+          
+          return {
+            ruta: ruta.nombre,
+            eficiencia,
+            usuarios: rutaViajes.length,
+            kmRecorrido: ruta.distancia || 0
+          };
+        });
+
+        setRouteEfficiency(routeStats);
+        
+        // Find lowest efficiency route
+        const lowestRoute = routeStats.reduce((prev, current) => 
+          prev.eficiencia > current.eficiencia ? current : prev
+        );
+        
+        setInsights(prev => ({ ...prev, lowestRoute: { name: lowestRoute.ruta, efficiency: lowestRoute.eficiencia } }));
+      }
+
+      // Calculate stop demand
+      if (paradas) {
+        const stopStats = paradas.map((parada: any) => {
+          const paradaViajes = viajes?.filter((v: any) => v.parada_salida === parada.nombre || v.parada_destino === parada.nombre) || [];
+          
+          return {
+            parada: parada.nombre,
+            demanda: paradaViajes.length,
+            tendencia: '+0%'
+          };
+        }).sort((a, b) => b.demanda - a.demanda).slice(0, 5);
+
+        setTopStops(stopStats);
+        
+        if (stopStats.length > 0) {
+          setInsights(prev => ({ ...prev, topStop: { name: stopStats[0].parada, trend: 12 } }));
+        }
+      }
+
+      // Load recommendations
+      if (optimizaciones) {
+        setRecommendations(optimizaciones);
+      }
+
+      // Calculate growth
+      if (monthlyTrend.length > 0) {
+        const firstMonth = monthlyTrend[0]?.usuarios || 1;
+        const lastMonth = monthlyTrend[monthlyTrend.length - 1]?.usuarios || 1;
+        const growth = Math.round(((lastMonth - firstMonth) / firstMonth) * 100);
+        setInsights(prev => ({ ...prev, growth }));
+      }
+
+    } catch (error) {
+      console.error('Error loading reports:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadReport = async (reportType: string) => {
+    try {
+      let csvContent = '';
+      let filename = '';
+
+      if (reportType === 'Reporte Mensual') {
+        filename = 'reporte_mensual.csv';
+        csvContent = 'Mes,Usuarios,Viajes,Costo (MXN)\n' + 
+          monthlyTrend.map(m => `${m.mes},${m.usuarios},${m.viajes},${m.costo}`).join('\n');
+      } else if (reportType === 'Análisis de Rutas') {
+        filename = 'analisis_rutas.csv';
+        csvContent = 'Ruta,Eficiencia (%),Usuarios,KM Recorrido\n' + 
+          routeEfficiency.map(r => `${r.ruta},${r.eficiencia},${r.usuarios},${r.kmRecorrido}`).join('\n');
+      } else if (reportType === 'Reporte de Usuarios') {
+        filename = 'reporte_usuarios.csv';
+        const { data: usuarios } = await supabase.from('estudiantes').select('*');
+        csvContent = 'ID,Nombre,Email,Estado,Fecha_Creacion\n' + 
+          (usuarios?.map((u: any) => `${u.id},${u.nombre},${u.email},${u.estado},${u.fecha_creacion}`).join('\n') || '');
+      } else if (reportType === 'Costos Operativos') {
+        filename = 'costos_operativos.csv';
+        csvContent = 'Mes,Costo Total (MXN)\n' + 
+          monthlyTrend.map(m => `${m.mes},${m.costo}`).join('\n');
+      }
+
+      const element = document.createElement('a');
+      element.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent));
+      element.setAttribute('download', filename);
+      element.style.display = 'none';
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      alert('Error descargando reporte');
+    }
   };
 
   return (
@@ -93,7 +257,7 @@ export function Reports() {
             <CheckCircle className="w-8 h-8 text-emerald-200 flex-shrink-0" />
             <div>
               <h3 className="font-semibold mb-1">Crecimiento Sostenido</h3>
-              <p className="text-sm text-emerald-100">El programa ha crecido un 27% en los últimos 5 meses, manteniendo una alta satisfacción.</p>
+              <p className="text-sm text-emerald-100">El programa ha crecido un {insights.growth}% en los últimos meses, manteniendo una alta satisfacción.</p>
             </div>
           </div>
         </div>
@@ -103,7 +267,7 @@ export function Reports() {
             <AlertCircle className="w-8 h-8 text-amber-200 flex-shrink-0" />
             <div>
               <h3 className="font-semibold mb-1">Oportunidad de Mejora</h3>
-              <p className="text-sm text-amber-100">La Ruta 4 presenta baja eficiencia (68%). Se recomienda optimizar paradas.</p>
+              <p className="text-sm text-amber-100">{insights.lowestRoute.name} presenta baja eficiencia ({insights.lowestRoute.efficiency}%). Se recomienda optimizar paradas.</p>
             </div>
           </div>
         </div>
@@ -113,122 +277,153 @@ export function Reports() {
             <TrendingUp className="w-8 h-8 text-green-200 flex-shrink-0" />
             <div>
               <h3 className="font-semibold mb-1">Alto Rendimiento</h3>
-              <p className="text-sm text-green-100">La parada Universidad presenta la mayor demanda con tendencia creciente del 12%.</p>
+              <p className="text-sm text-green-100">La parada {insights.topStop.name} presenta la mayor demanda con tendencia creciente.</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tendencia Mensual */}
-      <div className="bg-white rounded-lg shadow-md p-6 border border-emerald-100">
-        <h2 className="text-xl font-semibold text-emerald-800 mb-4">Tendencia Mensual de Usuarios y Costos</h2>
-        <ResponsiveContainer width="100%" height={350}>
-          <LineChart data={monthlyTrend}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#d1fae5" />
-            <XAxis dataKey="mes" stroke="#065f46" />
-            <YAxis yAxisId="left" stroke="#065f46" />
-            <YAxis yAxisId="right" orientation="right" stroke="#065f46" />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#ecfdf5', border: '1px solid #10b981' }}
-              labelStyle={{ color: '#065f46' }}
-            />
-            <Legend />
-            <Line yAxisId="left" type="monotone" dataKey="usuarios" stroke="#10b981" strokeWidth={3} name="Usuarios" />
-            <Line yAxisId="right" type="monotone" dataKey="costo" stroke="#f59e0b" strokeWidth={3} name="Costo (MXN)" />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Eficiencia de Rutas */}
-      <div className="bg-white rounded-lg shadow-md p-6 border border-emerald-100">
-        <h2 className="text-xl font-semibold text-emerald-800 mb-4">Eficiencia por Ruta</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={routeEfficiency}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#d1fae5" />
-            <XAxis dataKey="ruta" stroke="#065f46" />
-            <YAxis stroke="#065f46" />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#ecfdf5', border: '1px solid #10b981' }}
-              labelStyle={{ color: '#065f46' }}
-            />
-            <Bar dataKey="eficiencia" fill="#10b981" radius={[8, 8, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Top Paradas */}
-      <div className="bg-white rounded-lg shadow-md border border-emerald-100 overflow-hidden">
-        <div className="px-6 py-4 bg-emerald-50 border-b border-emerald-200">
-          <h2 className="text-xl font-semibold text-emerald-800">Top 5 Paradas por Demanda</h2>
+      {loading ? (
+        <div className="flex justify-center items-center py-12">
+          <Loader className="w-8 h-8 text-emerald-600 animate-spin" />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-emerald-50 border-b border-emerald-200">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Posición</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Parada</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Usuarios Activos</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Tendencia</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Estado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-emerald-100">
-              {topStops.map((stop, index) => (
-                <tr key={stop.parada} className="hover:bg-emerald-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold">
-                      {index + 1}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-800">{stop.parada}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{stop.demanda} estudiantes</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      stop.tendencia.startsWith('+')
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {stop.tendencia}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="flex items-center space-x-1">
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                      <span className="text-sm text-gray-600">Óptima</span>
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      ) : (
+        <>
+          {/* Tendencia Mensual */}
+          <div className="bg-white rounded-lg shadow-md p-6 border border-emerald-100">
+            <h2 className="text-xl font-semibold text-emerald-800 mb-4">Tendencia Mensual de Usuarios y Costos</h2>
+            {monthlyTrend.length > 0 ? (
+              <ResponsiveContainer width="100%" height={350}>
+                <LineChart data={monthlyTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d1fae5" />
+                  <XAxis dataKey="mes" stroke="#065f46" />
+                  <YAxis yAxisId="left" stroke="#065f46" />
+                  <YAxis yAxisId="right" orientation="right" stroke="#065f46" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#ecfdf5', border: '1px solid #10b981' }}
+                    labelStyle={{ color: '#065f46' }}
+                  />
+                  <Legend />
+                  <Line yAxisId="left" type="monotone" dataKey="usuarios" stroke="#10b981" strokeWidth={3} name="Usuarios" />
+                  <Line yAxisId="right" type="monotone" dataKey="costo" stroke="#f59e0b" strokeWidth={3} name="Costo (MXN)" />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center py-8 text-gray-500">No hay datos disponibles</div>
+            )}
+          </div>
 
-      {/* Recomendaciones */}
-      <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg p-6 border-2 border-emerald-200">
-        <h2 className="text-xl font-semibold text-emerald-800 mb-4 flex items-center space-x-2">
-          <FileText className="w-6 h-6" />
-          <span>Recomendaciones Estratégicas</span>
-        </h2>
-        <ul className="space-y-3">
-          <li className="flex items-start space-x-3">
-            <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-            <span className="text-gray-700">Incrementar frecuencia en la Ruta 2 durante horas pico (7:00 AM) debido a alta demanda en parada Universidad.</span>
-          </li>
-          <li className="flex items-start space-x-3">
-            <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-            <span className="text-gray-700">Evaluar reestructuración de la Ruta 4 para mejorar eficiencia operativa, actualmente en 68%.</span>
-          </li>
-          <li className="flex items-start space-x-3">
-            <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-            <span className="text-gray-700">Considerar apertura de nueva parada cerca de zona universitaria dado el crecimiento del 12% mensual.</span>
-          </li>
-          <li className="flex items-start space-x-3">
-            <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-            <span className="text-gray-700">Implementar sistema de registro digital para reducir tiempos de abordaje y mejorar puntualidad.</span>
-          </li>
-        </ul>
-      </div>
+          {/* Eficiencia de Rutas */}
+          <div className="bg-white rounded-lg shadow-md p-6 border border-emerald-100">
+            <h2 className="text-xl font-semibold text-emerald-800 mb-4">Eficiencia por Ruta</h2>
+            {routeEfficiency.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={routeEfficiency}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d1fae5" />
+                  <XAxis dataKey="ruta" stroke="#065f46" />
+                  <YAxis stroke="#065f46" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#ecfdf5', border: '1px solid #10b981' }}
+                    labelStyle={{ color: '#065f46' }}
+                  />
+                  <Bar dataKey="eficiencia" fill="#10b981" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center py-8 text-gray-500">No hay datos disponibles</div>
+            )}
+          </div>
+
+          {/* Top Paradas */}
+          <div className="bg-white rounded-lg shadow-md border border-emerald-100 overflow-hidden">
+            <div className="px-6 py-4 bg-emerald-50 border-b border-emerald-200">
+              <h2 className="text-xl font-semibold text-emerald-800">Top 5 Paradas por Demanda</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-emerald-50 border-b border-emerald-200">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Posición</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Parada</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Usuarios Activos</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Tendencia</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-100">
+                  {topStops.length > 0 ? (
+                    topStops.map((stop, index) => (
+                      <tr key={stop.parada} className="hover:bg-emerald-50 transition-colors">
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold">
+                            {index + 1}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-800">{stop.parada}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{stop.demanda} viajes</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            stop.tendencia.startsWith('+')
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {stop.tendencia}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="flex items-center space-x-1">
+                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            <span className="text-sm text-gray-600">Óptima</span>
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                        No hay datos disponibles
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Recomendaciones */}
+          <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg p-6 border-2 border-emerald-200">
+            <h2 className="text-xl font-semibold text-emerald-800 mb-4 flex items-center space-x-2">
+              <FileText className="w-6 h-6" />
+              <span>Recomendaciones Estratégicas (desde Supabase)</span>
+            </h2>
+            {recommendations.length > 0 ? (
+              <ul className="space-y-3">
+                {recommendations.slice(0, 5).map((rec, idx) => (
+                  <li key={idx} className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <span className="font-semibold text-gray-800">{rec.condicion}</span>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          rec.prioridad === 'alta' ? 'bg-red-100 text-red-800' :
+                          rec.prioridad === 'media' ? 'bg-amber-100 text-amber-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {rec.prioridad}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700">{rec.accion}</p>
+                      <p className="text-xs text-gray-500 mt-1">Impacto esperado: {rec.impacto}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-600">No hay recomendaciones disponibles. El sistema genera recomendaciones cuando detecta oportunidades de mejora.</p>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
