@@ -1,161 +1,67 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
 import { Calendar, Clock, Bus, User, MapPin, Fuel, TrendingUp, AlertCircle } from 'lucide-react';
 
 interface Trip {
   id: string;
   fecha: string;
-  horaSalida: string;
-  horaLlegada: string;
+  hora_salida_real: string;
+  hora_llegada_real: string;
   unidad: string;
   ruta: string;
   chofer: string;
   pasajeros: number;
-  gasolinaConsumida: number;
-  tiempoRecorrido: string;
-  tiempoEstimado: string;
-  estado: 'completado' | 'retrasado' | 'en_curso';
+  gasolina_consumida: number;
+  tiempo_recorrido: number;
+  retraso: number;
 }
 
-const trips: Trip[] = [
-  {
-    id: '1',
-    fecha: '2026-05-16',
-    horaSalida: '5:00 AM',
-    horaLlegada: '6:25 AM',
-    unidad: 'Unidad 01',
-    ruta: 'Ruta Completa Matutina',
-    chofer: 'Juan Pérez',
-    pasajeros: 42,
-    gasolinaConsumida: 5.3,
-    tiempoRecorrido: '85 min',
-    tiempoEstimado: '85 min',
-    estado: 'completado'
-  },
-  {
-    id: '2',
-    fecha: '2026-05-16',
-    horaSalida: '5:30 AM',
-    horaLlegada: '7:10 AM',
-    unidad: 'Unidad 02',
-    ruta: 'Ruta Completa Matutina 2',
-    chofer: 'María González',
-    pasajeros: 38,
-    gasolinaConsumida: 5.8,
-    tiempoRecorrido: '100 min',
-    tiempoEstimado: '90 min',
-    estado: 'retrasado'
-  },
-  {
-    id: '3',
-    fecha: '2026-05-16',
-    horaSalida: '13:00 PM',
-    horaLlegada: '13:45 PM',
-    unidad: 'Unidad 03',
-    ruta: 'Ruta Directa Universidad',
-    chofer: 'Carlos Ramírez',
-    pasajeros: 35,
-    gasolinaConsumida: 3.8,
-    tiempoRecorrido: '45 min',
-    tiempoEstimado: '45 min',
-    estado: 'completado'
-  },
-  {
-    id: '4',
-    fecha: '2026-05-16',
-    horaSalida: '14:00 PM',
-    horaLlegada: '14:35 PM',
-    unidad: 'Unidad 05',
-    ruta: 'Ruta Directa CBTIS',
-    chofer: 'Ana Torres',
-    pasajeros: 28,
-    gasolinaConsumida: 3.3,
-    tiempoRecorrido: '35 min',
-    tiempoEstimado: '35 min',
-    estado: 'completado'
-  },
-  {
-    id: '5',
-    fecha: '2026-05-16',
-    horaSalida: '18:00 PM',
-    horaLlegada: '19:20 PM',
-    unidad: 'Unidad 01',
-    ruta: 'Ruta Regreso Sendero',
-    chofer: 'Juan Pérez',
-    pasajeros: 45,
-    gasolinaConsumida: 5.1,
-    tiempoRecorrido: '80 min',
-    tiempoEstimado: '75 min',
-    estado: 'retrasado'
-  },
-  {
-    id: '6',
-    fecha: '2026-05-15',
-    horaSalida: '5:00 AM',
-    horaLlegada: '6:25 AM',
-    unidad: 'Unidad 01',
-    ruta: 'Ruta Completa Matutina',
-    chofer: 'Juan Pérez',
-    pasajeros: 40,
-    gasolinaConsumida: 5.2,
-    tiempoRecorrido: '85 min',
-    tiempoEstimado: '85 min',
-    estado: 'completado'
-  },
-  {
-    id: '7',
-    fecha: '2026-05-15',
-    horaSalida: '13:00 PM',
-    horaLlegada: '13:42 PM',
-    unidad: 'Unidad 03',
-    ruta: 'Ruta Directa Universidad',
-    chofer: 'Carlos Ramírez',
-    pasajeros: 32,
-    gasolinaConsumida: 3.7,
-    tiempoRecorrido: '42 min',
-    tiempoEstimado: '45 min',
-    estado: 'completado'
-  },
-  {
-    id: '8',
-    fecha: '2026-05-15',
-    horaSalida: '18:00 PM',
-    horaLlegada: '19:15 PM',
-    unidad: 'Unidad 01',
-    ruta: 'Ruta Regreso Sendero',
-    chofer: 'Juan Pérez',
-    pasajeros: 43,
-    gasolinaConsumida: 5.0,
-    tiempoRecorrido: '75 min',
-    tiempoEstimado: '75 min',
-    estado: 'completado'
-  },
-];
-
 export function Trips() {
-  const [filterDate, setFilterDate] = useState('2026-05-16');
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const filteredTrips = trips.filter(trip => trip.fecha === filterDate);
-  const completedTrips = filteredTrips.filter(t => t.estado === 'completado').length;
-  const delayedTrips = filteredTrips.filter(t => t.estado === 'retrasado').length;
-  const totalPassengers = filteredTrips.reduce((sum, t) => sum + t.pasajeros, 0);
-  const totalFuel = filteredTrips.reduce((sum, t) => sum + t.gasolinaConsumida, 0);
+  useEffect(() => {
+    loadTrips();
+  }, [filterDate]);
 
-  const getStatusColor = (estado: string) => {
-    switch (estado) {
-      case 'completado': return 'bg-green-100 text-green-800';
-      case 'retrasado': return 'bg-red-100 text-red-800';
-      case 'en_curso': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const loadTrips = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('viajes')
+        .select('*')
+        .eq('fecha', filterDate)
+        .order('hora_salida_real', { ascending: true });
+
+      if (error) {
+        console.error('Error loading trips:', error);
+        alert('Error al cargar viajes: ' + error.message);
+      } else {
+        setTrips(data || []);
+      }
+    } catch (error) {
+      console.error('Error loading trips:', error);
+      alert('Error al cargar viajes');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatusLabel = (estado: string) => {
-    switch (estado) {
-      case 'completado': return 'Completado';
-      case 'retrasado': return 'Retrasado';
-      case 'en_curso': return 'En Curso';
-      default: return estado;
-    }
+  const filteredTrips = trips;
+  const completedTrips = trips.length;
+  const delayedTrips = trips.filter(t => (t.retraso || 0) > 15).length;
+  const totalPassengers = trips.reduce((sum, t) => sum + (t.pasajeros || 0), 0);
+  const totalFuel = trips.reduce((sum, t) => sum + (t.gasolina_consumida || 0), 0);
+
+  const getStatusColor = (retraso: number) => {
+    if (retraso > 15) return 'bg-red-100 text-red-800';
+    return 'bg-green-100 text-green-800';
+  };
+
+  const getStatusLabel = (retraso: number) => {
+    if (retraso > 15) return 'Retrasado';
+    return 'A Tiempo';
   };
 
   return (
@@ -187,8 +93,8 @@ export function Trips() {
         <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white shadow-md">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-100 text-sm">Viajes Completados</p>
-              <p className="text-3xl font-bold mt-1">{completedTrips}</p>
+              <p className="text-green-100 text-sm">A Tiempo</p>
+              <p className="text-3xl font-bold mt-1">{trips.filter(t => (t.retraso || 0) <= 15).length}</p>
             </div>
             <TrendingUp className="w-10 h-10 text-green-200" />
           </div>
@@ -227,58 +133,69 @@ export function Trips() {
                 <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Pasajeros</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Gasolina</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Tiempo</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Estado</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-emerald-800">Retraso</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-emerald-100">
-              {filteredTrips.map((trip) => (
-                <tr key={trip.id} className="hover:bg-emerald-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="w-4 h-4 text-emerald-600" />
-                      <span className="text-sm text-gray-800">{new Date(trip.fecha).toLocaleDateString('es-MX')}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-600">
-                      <div>{trip.horaSalida} - {trip.horaLlegada}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-1">
-                      <Bus className="w-4 h-4 text-emerald-600" />
-                      <span className="text-sm text-gray-600">{trip.unidad}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-1">
-                      <MapPin className="w-4 h-4 text-emerald-600" />
-                      <span className="text-sm text-gray-600">{trip.ruta}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{trip.chofer}</td>
-                  <td className="px-6 py-4">
-                    <span className="font-semibold text-gray-800">{trip.pasajeros}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-1">
-                      <Fuel className="w-4 h-4 text-emerald-600" />
-                      <span className="text-sm text-gray-600">{trip.gasolinaConsumida} L</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm">
-                      <div className="font-semibold text-gray-800">{trip.tiempoRecorrido}</div>
-                      <div className="text-xs text-gray-500">Est: {trip.tiempoEstimado}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(trip.estado)}`}>
-                      {getStatusLabel(trip.estado)}
-                    </span>
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                    Cargando viajes...
                   </td>
                 </tr>
-              ))}
+              ) : filteredTrips.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                    No hay viajes registrados para esta fecha
+                  </td>
+                </tr>
+              ) : (
+                filteredTrips.map((trip) => (
+                  <tr key={trip.id} className="hover:bg-emerald-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm text-gray-800">{new Date(trip.fecha).toLocaleDateString('es-MX')}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-600">
+                        <div>{trip.hora_salida_real} - {trip.hora_llegada_real}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-1">
+                        <Bus className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm text-gray-600">{trip.unidad}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-1">
+                        <MapPin className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm text-gray-600">{trip.ruta}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{trip.chofer}</td>
+                    <td className="px-6 py-4">
+                      <span className="font-semibold text-gray-800">{trip.pasajeros}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-1">
+                        <Fuel className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm text-gray-600">{trip.gasolina_consumida?.toFixed(1) || 0} L</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="font-semibold text-gray-800">{trip.tiempo_recorrido || 0} min</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(trip.retraso || 0)}`}>
+                        {trip.retraso > 0 ? `+${trip.retraso} min` : 'A Tiempo'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

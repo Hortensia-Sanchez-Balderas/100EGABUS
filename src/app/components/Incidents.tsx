@@ -1,129 +1,63 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
 import { AlertTriangle, Wrench, Clock, Car, AlertCircle, CheckCircle, XCircle, DollarSign } from 'lucide-react';
 
 interface Incident {
   id: string;
   fecha: string;
+  hora: string;
   tipo: 'ponchadura' | 'falla_mecanica' | 'retraso' | 'trafico' | 'accidente_menor';
   unidad: string;
-  chofer: string;
+  chofer: string | null;
+  ruta: string | null;
   descripcion: string;
-  costoEstimado: number;
-  estadoResolucion: 'pendiente' | 'en_proceso' | 'resuelto';
-  prioridad: 'alta' | 'media' | 'baja';
-  tiempoInactividad: string;
+  costo_estimado: number;
+  estado_resolucion: 'pendiente' | 'en_proceso' | 'resuelto';
+  tiempo_inactividad: string | null;
+  requiere_mantenimiento: boolean;
+  ubicacion: string | null;
 }
 
-const incidents: Incident[] = [
-  {
-    id: '1',
-    fecha: '2026-05-16',
-    tipo: 'ponchadura',
-    unidad: 'Unidad 03',
-    chofer: 'Carlos Ramírez',
-    descripcion: 'Ponchadura de llanta trasera derecha en Av. Universidad',
-    costoEstimado: 850,
-    estadoResolucion: 'resuelto',
-    prioridad: 'media',
-    tiempoInactividad: '25 min'
-  },
-  {
-    id: '2',
-    fecha: '2026-05-15',
-    tipo: 'falla_mecanica',
-    unidad: 'Unidad 04',
-    chofer: 'Roberto Méndez',
-    descripcion: 'Falla en el sistema de frenos, requiere revisión completa',
-    costoEstimado: 4500,
-    estadoResolucion: 'en_proceso',
-    prioridad: 'alta',
-    tiempoInactividad: '2 días'
-  },
-  {
-    id: '3',
-    fecha: '2026-05-14',
-    tipo: 'retraso',
-    unidad: 'Unidad 01',
-    chofer: 'Juan Pérez',
-    descripcion: 'Retraso de 15 minutos por tráfico intenso en Av. Constitución',
-    costoEstimado: 0,
-    estadoResolucion: 'resuelto',
-    prioridad: 'baja',
-    tiempoInactividad: '15 min'
-  },
-  {
-    id: '4',
-    fecha: '2026-05-13',
-    tipo: 'trafico',
-    unidad: 'Unidad 02',
-    chofer: 'María González',
-    descripcion: 'Manifestación en ruta principal, desvío por vías alternas',
-    costoEstimado: 0,
-    estadoResolucion: 'resuelto',
-    prioridad: 'media',
-    tiempoInactividad: '30 min'
-  },
-  {
-    id: '5',
-    fecha: '2026-05-12',
-    tipo: 'accidente_menor',
-    unidad: 'Unidad 05',
-    chofer: 'Ana Torres',
-    descripcion: 'Roce leve en estacionamiento, daño mínimo en parachoques',
-    costoEstimado: 2300,
-    estadoResolucion: 'resuelto',
-    prioridad: 'baja',
-    tiempoInactividad: '1 hora'
-  },
-  {
-    id: '6',
-    fecha: '2026-05-10',
-    tipo: 'falla_mecanica',
-    unidad: 'Unidad 06',
-    chofer: 'Diego Hernández',
-    descripcion: 'Sobrecalentamiento del motor, cambio de termostato',
-    costoEstimado: 1800,
-    estadoResolucion: 'resuelto',
-    prioridad: 'alta',
-    tiempoInactividad: '4 horas'
-  },
-  {
-    id: '7',
-    fecha: '2026-05-08',
-    tipo: 'ponchadura',
-    unidad: 'Unidad 01',
-    chofer: 'Juan Pérez',
-    descripcion: 'Ponchadura de llanta delantera izquierda',
-    costoEstimado: 900,
-    estadoResolucion: 'resuelto',
-    prioridad: 'media',
-    tiempoInactividad: '30 min'
-  },
-  {
-    id: '8',
-    fecha: '2026-05-05',
-    tipo: 'retraso',
-    unidad: 'Unidad 03',
-    chofer: 'Carlos Ramírez',
-    descripcion: 'Retraso por condiciones climáticas adversas (lluvia intensa)',
-    costoEstimado: 0,
-    estadoResolucion: 'resuelto',
-    prioridad: 'baja',
-    tiempoInactividad: '20 min'
-  },
-];
-
 export function Incidents() {
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<string>('todas');
+
+  useEffect(() => {
+    loadIncidents();
+  }, []);
+
+  const loadIncidents = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('incidencias')
+        .select('*')
+        .order('fecha', { ascending: false });
+
+      if (error) {
+        console.error('Error loading incidents:', error);
+        alert('Error al cargar incidencias: ' + error.message);
+      } else {
+        setIncidents(data || []);
+      }
+    } catch (error) {
+      console.error('Error loading incidents:', error);
+      alert('Error al cargar incidencias');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredIncidents = filterType === 'todas'
     ? incidents
     : incidents.filter(inc => inc.tipo === filterType);
 
-  const totalCost = incidents.reduce((sum, inc) => sum + inc.costoEstimado, 0);
-  const pendingIncidents = incidents.filter(inc => inc.estadoResolucion === 'pendiente').length;
-  const resolvedIncidents = incidents.filter(inc => inc.estadoResolucion === 'resuelto').length;
-  const highPriority = incidents.filter(inc => inc.prioridad === 'alta').length;
+  const totalCost = incidents.reduce((sum, inc) => sum + (inc.costo_estimado || 0), 0);
+  const pendingIncidents = incidents.filter(inc => inc.estado_resolucion === 'pendiente').length;
+  const resolvedIncidents = incidents.filter(inc => inc.estado_resolucion === 'resuelto').length;
+  const highPriority = incidents.length; // Todos son potencialmente de alta prioridad
+  const processingIncidents = incidents.filter(inc => inc.estado_resolucion === 'en_proceso').length;
 
   const getTypeIcon = (tipo: string) => {
     switch (tipo) {
@@ -167,12 +101,21 @@ export function Incidents() {
     }
   };
 
-  const getPriorityColor = (prioridad: string) => {
-    switch (prioridad) {
-      case 'alta': return 'bg-red-100 text-red-800';
-      case 'media': return 'bg-amber-100 text-amber-800';
-      case 'baja': return 'bg-green-100 text-green-800';
+  const getStatusColor = (estado: string) => {
+    switch (estado) {
+      case 'resuelto': return 'bg-green-100 text-green-800';
+      case 'en_proceso': return 'bg-blue-100 text-blue-800';
+      case 'pendiente': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusLabel = (estado: string) => {
+    switch (estado) {
+      case 'resuelto': return 'Resuelto';
+      case 'en_proceso': return 'En Proceso';
+      case 'pendiente': return 'Pendiente';
+      default: return estado;
     }
   };
 
@@ -208,19 +151,19 @@ export function Incidents() {
         <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-lg p-6 text-white shadow-md">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-red-100 text-sm">Prioridad Alta</p>
-              <p className="text-3xl font-bold mt-1">{highPriority}</p>
+              <p className="text-red-100 text-sm">Pendientes</p>
+              <p className="text-3xl font-bold mt-1">{pendingIncidents}</p>
             </div>
             <AlertCircle className="w-10 h-10 text-red-200" />
           </div>
         </div>
-        <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white shadow-md">
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-md">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-100 text-sm">Resueltas</p>
-              <p className="text-3xl font-bold mt-1">{resolvedIncidents}</p>
+              <p className="text-blue-100 text-sm">En Proceso</p>
+              <p className="text-3xl font-bold mt-1">{processingIncidents}</p>
             </div>
-            <CheckCircle className="w-10 h-10 text-green-200" />
+            <Clock className="w-10 h-10 text-blue-200" />
           </div>
         </div>
         <div className="bg-gradient-to-r from-amber-500 to-amber-600 rounded-lg p-6 text-white shadow-md">
@@ -237,52 +180,62 @@ export function Incidents() {
       {/* Timeline */}
       <div className="bg-white rounded-lg shadow-md p-6 border border-emerald-100">
         <h2 className="text-xl font-semibold text-emerald-800 mb-6">Timeline de Incidentes</h2>
-        <div className="space-y-4">
-          {filteredIncidents.map((incident, index) => (
-            <div key={incident.id} className="flex items-start space-x-4">
-              <div className="flex flex-col items-center">
-                <div className={`w-10 h-10 rounded-full ${getTypeColor(incident.tipo)} flex items-center justify-center`}>
-                  {getTypeIcon(incident.tipo)}
+        {loading ? (
+          <div className="text-center py-8 text-gray-500">Cargando incidencias...</div>
+        ) : filteredIncidents.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">No hay incidencias registradas</div>
+        ) : (
+          <div className="space-y-4">
+            {filteredIncidents.map((incident, index) => (
+              <div key={incident.id} className="flex items-start space-x-4">
+                <div className="flex flex-col items-center">
+                  <div className={`w-10 h-10 rounded-full ${getTypeColor(incident.tipo)} flex items-center justify-center`}>
+                    {getTypeIcon(incident.tipo)}
+                  </div>
+                  {index < filteredIncidents.length - 1 && (
+                    <div className="w-0.5 h-16 bg-emerald-200"></div>
+                  )}
                 </div>
-                {index < filteredIncidents.length - 1 && (
-                  <div className="w-0.5 h-16 bg-emerald-200"></div>
-                )}
-              </div>
-              <div className="flex-1 bg-emerald-50 rounded-lg p-4 border border-emerald-100">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <div className="flex items-center space-x-2 mb-1">
-                      <h3 className="font-semibold text-gray-800">{getTypeLabel(incident.tipo)}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(incident.prioridad)}`}>
-                        {incident.prioridad.charAt(0).toUpperCase() + incident.prioridad.slice(1)}
-                      </span>
+                <div className="flex-1 bg-emerald-50 rounded-lg p-4 border border-emerald-100">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="flex items-center space-x-2 mb-1">
+                        <h3 className="font-semibold text-gray-800">{getTypeLabel(incident.tipo)}</h3>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(incident.estado_resolucion)}`}>
+                          {getStatusLabel(incident.estado_resolucion)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">{incident.descripcion}</p>
                     </div>
-                    <p className="text-sm text-gray-600">{incident.descripcion}</p>
+                    {getStatusIcon(incident.estado_resolucion)}
                   </div>
-                  {getStatusIcon(incident.estadoResolucion)}
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-sm">
-                  <div>
-                    <p className="text-gray-500 text-xs">Fecha</p>
-                    <p className="font-medium text-gray-800">{new Date(incident.fecha).toLocaleDateString('es-MX')}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 text-xs">Unidad</p>
-                    <p className="font-medium text-gray-800">{incident.unidad}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 text-xs">Tiempo Inactivo</p>
-                    <p className="font-medium text-gray-800">{incident.tiempoInactividad}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 text-xs">Costo</p>
-                    <p className="font-medium text-emerald-700">${incident.costoEstimado.toLocaleString()}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3 text-sm">
+                    <div>
+                      <p className="text-gray-500 text-xs">Fecha</p>
+                      <p className="font-medium text-gray-800">{new Date(incident.fecha).toLocaleDateString('es-MX')}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs">Hora</p>
+                      <p className="font-medium text-gray-800">{incident.hora}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs">Unidad</p>
+                      <p className="font-medium text-gray-800">{incident.unidad}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs">Inactividad</p>
+                      <p className="font-medium text-gray-800">{incident.tiempo_inactividad || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs">Costo</p>
+                      <p className="font-medium text-emerald-700">${incident.costo_estimado?.toLocaleString() || '0'}</p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Statistics */}
@@ -293,7 +246,7 @@ export function Incidents() {
           <div className="space-y-3">
             {['ponchadura', 'falla_mecanica', 'retraso', 'trafico', 'accidente_menor'].map((tipo) => {
               const count = incidents.filter(inc => inc.tipo === tipo).length;
-              const percentage = (count / incidents.length) * 100;
+              const percentage = incidents.length > 0 ? (count / incidents.length) * 100 : 0;
               return (
                 <div key={tipo}>
                   <div className="flex justify-between items-center mb-1">
@@ -328,8 +281,8 @@ export function Incidents() {
 
             <div className="space-y-2">
               {incidents
-                .filter(inc => inc.costoEstimado > 0)
-                .sort((a, b) => b.costoEstimado - a.costoEstimado)
+                .filter(inc => (inc.costo_estimado || 0) > 0)
+                .sort((a, b) => (b.costo_estimado || 0) - (a.costo_estimado || 0))
                 .slice(0, 5)
                 .map((incident) => (
                   <div key={incident.id} className="flex justify-between items-center p-3 bg-emerald-50 rounded-lg">
@@ -337,7 +290,7 @@ export function Incidents() {
                       <p className="text-sm font-medium text-gray-800">{incident.unidad}</p>
                       <p className="text-xs text-gray-500">{getTypeLabel(incident.tipo)}</p>
                     </div>
-                    <span className="text-sm font-bold text-emerald-700">${incident.costoEstimado.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-emerald-700">${(incident.costo_estimado || 0).toLocaleString()}</span>
                   </div>
                 ))}
             </div>
