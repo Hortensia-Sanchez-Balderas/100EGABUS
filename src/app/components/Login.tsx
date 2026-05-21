@@ -89,7 +89,6 @@ export function Login({ onLogin }: LoginProps) {
               }}
             />
           </div>
-          <h1 className="text-5xl font-bold text-emerald-800 mb-3">100EGABUS</h1>
           <p className="text-xl text-gray-600">Sistema de Gestión de Transporte Estudiantil</p>
           <p className="text-sm text-gray-500 mt-2">Ciénega de Flores, Nuevo León</p>
         </div>
