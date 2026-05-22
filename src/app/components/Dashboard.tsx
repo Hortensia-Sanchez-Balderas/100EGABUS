@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
-import { Users, MapPin, Bus, TrendingUp, Clock, Fuel } from 'lucide-react';
+import { Users, MapPin, Bus, TrendingUp, Clock, Fuel, AlertTriangle, AlertCircle, DollarSign, Zap, Wrench } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 const COLORS = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0'];
@@ -9,6 +9,8 @@ export function Dashboard() {
   const [estudiantes, setEstudiantes] = useState<any[]>([]);
   const [paradas, setParadas] = useState<any[]>([]);
   const [viajes, setViajes] = useState<any[]>([]);
+  const [incidencias, setIncidencias] = useState<any[]>([]);
+  const [unidades, setUnidades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,15 +20,19 @@ export function Dashboard() {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const [estudiantesRes, paradasRes, viajesRes] = await Promise.all([
+      const [estudiantesRes, paradasRes, viajesRes, incidenciasRes, unidadesRes] = await Promise.all([
         supabase.from('estudiantes').select('parada_asignada, estado'),
-        supabase.from('paradas').select('nombre'),
-        supabase.from('viajes').select('ruta, pasajeros, fecha, gasolina_consumida')
+        supabase.from('paradas').select('nombre, capacidad'),
+        supabase.from('viajes').select('ruta, pasajeros, fecha, gasolina_consumida, retraso'),
+        supabase.from('incidencias').select('id, tipo, fecha, descripcion, resuelto'),
+        supabase.from('unidades').select('id, placa, proximo_mantenimiento')
       ]);
 
       if (estudiantesRes.data) setEstudiantes(estudiantesRes.data);
       if (paradasRes.data) setParadas(paradasRes.data);
       if (viajesRes.data) setViajes(viajesRes.data);
+      if (incidenciasRes.data) setIncidencias(incidenciasRes.data);
+      if (unidadesRes.data) setUnidades(unidadesRes.data);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -111,6 +117,88 @@ export function Dashboard() {
     ? Math.round(((viajes.filter(v => (v.retraso || 0) <= 15).length / viajes.length) * 100))
     : 87;
 
+  // 💰 KPIs FINANCIEROS
+  const totalPasajeros = viajes.reduce((sum, v) => sum + (v.pasajeros || 0), 0);
+  const ingresosEstimados = totalPasajeros * 25; // $25 por pasajero
+  const costoGasolina = (monthlyFuelConsumption || 0) * 25; // $25 por litro
+  const costoMantenimiento = Math.round((unidades.filter(u => {
+    const nextMaint = new Date(u.proximo_mantenimiento);
+    return nextMaint < new Date();
+  }).length) * 150); // Estimado $150 por unidad en mantenimiento urgente
+  const costoOperativoTotal = costoGasolina + costoMantenimiento;
+  const gananciaNetaEstimada = ingresosEstimados - costoOperativoTotal;
+  const margenOperativo = ingresosEstimados > 0 ? Math.round((gananciaNetaEstimada / ingresosEstimados) * 100) : 0;
+
+  // 🚨 ALERTAS CRÍTICAS
+  interface Alert {
+    id: string;
+    titulo: string;
+    descripcion: string;
+    severidad: 'crítica' | 'importante' | 'info';
+    icono: React.ReactNode;
+  }
+
+  const alertas: Alert[] = [];
+
+  // Alertas de incidencias sin resolver
+  incidencias.forEach(inc => {
+    if (!inc.resuelto) {
+      alertas.push({
+        id: `inc-${inc.id}`,
+        titulo: `Incidencia: ${inc.tipo}`,
+        descripcion: inc.descripcion || 'Sin descripción',
+        severidad: 'crítica',
+        icono: <AlertTriangle className="w-5 h-5" />
+      });
+    }
+  });
+
+  // Alertas de mantenimiento vencido
+  unidades.forEach(unidad => {
+    const nextMaint = new Date(unidad.proximo_mantenimiento);
+    if (nextMaint < new Date()) {
+      alertas.push({
+        id: `maint-${unidad.id}`,
+        titulo: `Mantenimiento Vencido: ${unidad.placa}`,
+        descripcion: `Requiere revisión urgente desde ${nextMaint.toLocaleDateString('es-MX')}`,
+        severidad: 'crítica',
+        icono: <Wrench className="w-5 h-5" />
+      });
+    }
+  });
+
+  // Alertas de paradas saturadas
+  const demandMap = new Map<string, number>();
+  paradas.forEach(parada => {
+    const usuarios = estudiantes.filter(
+      est => est.parada_asignada === parada.nombre && est.estado === 'activo'
+    ).length;
+    const saturacion = parada.capacidad > 0 ? Math.round((usuarios / parada.capacidad) * 100) : 0;
+    if (saturacion > 85) {
+      alertas.push({
+        id: `sat-${parada.nombre}`,
+        titulo: `Parada Saturada: ${parada.nombre}`,
+        descripcion: `Saturación al ${saturacion}% - ${usuarios}/${parada.capacidad} usuarios`,
+        severidad: 'importante',
+        icono: <AlertCircle className="w-5 h-5" />
+      });
+    }
+  });
+
+  // Alerta de margen bajo
+  if (margenOperativo < 20 && margenOperativo >= 0) {
+    alertas.push({
+      id: 'margen-bajo',
+      titulo: 'Margen Operativo Bajo',
+      descripcion: `Ganancia neta solo al ${margenOperativo}% - Revisar costos`,
+      severidad: 'importante',
+      icono: <TrendingUp className="w-5 h-5" />
+    });
+  }
+
+  const alertasCríticas = alertas.filter(a => a.severidad === 'crítica').length;
+  const alertasImportantes = alertas.filter(a => a.severidad === 'importante').length;
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -177,6 +265,106 @@ export function Dashboard() {
           <p className="text-lime-100 text-sm mt-4">Capacidad óptima</p>
         </div>
       </div>
+
+      {/* KPIs Financieros 💰 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm">Ingresos Estimados</p>
+              <p className="text-3xl font-bold mt-2">${ingresosEstimados.toLocaleString()}</p>
+            </div>
+            <DollarSign className="w-12 h-12 text-blue-200" />
+          </div>
+          <p className="text-blue-100 text-xs mt-4">{totalPasajeros} pasajeros × $25</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-orange-100 text-sm">Costo Operativo</p>
+              <p className="text-3xl font-bold mt-2">${costoOperativoTotal.toLocaleString()}</p>
+            </div>
+            <Fuel className="w-12 h-12 text-orange-200" />
+          </div>
+          <p className="text-orange-100 text-xs mt-4">Gasolina + Mantenimiento</p>
+        </div>
+
+        <div className={`bg-gradient-to-br ${gananciaNetaEstimada > 0 ? 'from-green-500 to-green-600' : 'from-red-500 to-red-600'} rounded-lg p-6 text-white shadow-lg`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`${gananciaNetaEstimada > 0 ? 'text-green-100' : 'text-red-100'} text-sm`}>Ganancia Neta</p>
+              <p className="text-3xl font-bold mt-2">${gananciaNetaEstimada.toLocaleString()}</p>
+            </div>
+            <TrendingUp className={`w-12 h-12 ${gananciaNetaEstimada > 0 ? 'text-green-200' : 'text-red-200'}`} />
+          </div>
+          <p className={`${gananciaNetaEstimada > 0 ? 'text-green-100' : 'text-red-100'} text-xs mt-4`}>Diferencia</p>
+        </div>
+
+        <div className={`bg-gradient-to-br ${margenOperativo >= 25 ? 'from-purple-500 to-purple-600' : margenOperativo >= 15 ? 'from-amber-500 to-amber-600' : 'from-red-500 to-red-600'} rounded-lg p-6 text-white shadow-lg`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`${margenOperativo >= 25 ? 'text-purple-100' : margenOperativo >= 15 ? 'text-amber-100' : 'text-red-100'} text-sm`}>Margen Operativo</p>
+              <p className="text-3xl font-bold mt-2">{margenOperativo}%</p>
+            </div>
+            <Zap className={`w-12 h-12 ${margenOperativo >= 25 ? 'text-purple-200' : margenOperativo >= 15 ? 'text-amber-200' : 'text-red-200'}`} />
+          </div>
+          <p className={`${margenOperativo >= 25 ? 'text-purple-100' : margenOperativo >= 15 ? 'text-amber-100' : 'text-red-100'} text-xs mt-4`}>Saludable</p>
+        </div>
+      </div>
+
+      {/* Alertas Críticas 🚨 */}
+      {alertas.length > 0 && (
+        <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-lg p-6 border-2 border-red-200 shadow-md">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-red-800 flex items-center space-x-2">
+              <AlertTriangle className="w-6 h-6" />
+              <span>Alertas Críticas y Recomendaciones</span>
+              {alertasCríticas > 0 && (
+                <span className="ml-2 bg-red-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                  {alertasCríticas} Crítica{alertasCríticas !== 1 ? 's' : ''}
+                </span>
+              )}
+              {alertasImportantes > 0 && (
+                <span className="ml-2 bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                  {alertasImportantes} Importante{alertasImportantes !== 1 ? 's' : ''}
+                </span>
+              )}
+            </h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+            {alertas.map((alerta) => (
+              <div
+                key={alerta.id}
+                className={`p-4 rounded-lg border-l-4 flex items-start space-x-3 ${
+                  alerta.severidad === 'crítica'
+                    ? 'bg-red-50 border-red-500 border-l-4'
+                    : 'bg-orange-50 border-orange-500 border-l-4'
+                }`}
+              >
+                <div className={`flex-shrink-0 ${
+                  alerta.severidad === 'crítica' ? 'text-red-600' : 'text-orange-600'
+                }`}>
+                  {alerta.icono}
+                </div>
+                <div className="flex-1">
+                  <p className={`text-sm font-bold ${
+                    alerta.severidad === 'crítica' ? 'text-red-800' : 'text-orange-800'
+                  }`}>
+                    {alerta.titulo}
+                  </p>
+                  <p className={`text-xs mt-1 ${
+                    alerta.severidad === 'crítica' ? 'text-red-700' : 'text-orange-700'
+                  }`}>
+                    {alerta.descripcion}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
