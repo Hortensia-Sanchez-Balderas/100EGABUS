@@ -21,9 +21,9 @@ export function Dashboard() {
     setLoading(true);
     try {
       const [estudiantesRes, paradasRes, viajesRes, incidenciasRes, unidadesRes] = await Promise.all([
-        supabase.from('estudiantes').select('parada_asignada, estado'),
+        supabase.from('estudiantes').select('parada_asignada, estado, horario_ida, horario_regreso'),
         supabase.from('paradas').select('nombre, capacidad'),
-        supabase.from('viajes').select('ruta, pasajeros, fecha, gasolina_consumida, retraso'),
+        supabase.from('viajes').select('ruta, pasajeros, fecha, gasolina_consumida, retraso, hora_salida_real'),
         supabase.from('incidencias').select('id, tipo, fecha, descripcion, resuelto'),
         supabase.from('unidades').select('id, placa, proximo_mantenimiento')
       ]);
@@ -198,6 +198,70 @@ export function Dashboard() {
 
   const alertasCríticas = alertas.filter(a => a.severidad === 'crítica').length;
   const alertasImportantes = alertas.filter(a => a.severidad === 'importante').length;
+
+  // 📊 RENTABILIDAD POR RUTA
+  const rutaMap = new Map<string, { pasajeros: number; gasolina: number }>();
+  viajes.forEach(viaje => {
+    if (viaje.ruta) {
+      const current = rutaMap.get(viaje.ruta) || { pasajeros: 0, gasolina: 0 };
+      rutaMap.set(viaje.ruta, {
+        pasajeros: current.pasajeros + (viaje.pasajeros || 0),
+        gasolina: current.gasolina + (viaje.gasolina_consumida || 0)
+      });
+    }
+  });
+
+  const rentabilidadPorRuta = Array.from(rutaMap.entries())
+    .map(([ruta, datos]) => {
+      const ingresos = datos.pasajeros * 25;
+      const costos = (datos.gasolina * 25) + (datos.gasolina > 0 ? 150 : 0); // $150 mantenimiento estimado
+      const ganancia = ingresos - costos;
+      const margen = ingresos > 0 ? Math.round((ganancia / ingresos) * 100) : 0;
+      return {
+        ruta,
+        ingresos,
+        costos,
+        ganancia,
+        margen
+      };
+    })
+    .sort((a, b) => b.ganancia - a.ganancia);
+
+  // 🔥 MATRIZ DE SATURACIÓN PARADA/HORA
+  const horasPico = ['05:00', '06:00', '07:00', '08:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+  const matriceSaturacion: any[] = [];
+
+  paradas.forEach(parada => {
+    const filaParada: any = { parada: parada.nombre, capacidad: parada.capacidad };
+    
+    horasPico.forEach(hora => {
+      // Contar estudiantes con horario_ida o horario_regreso que coincida
+      const estudiantesEnHora = estudiantes.filter(est => {
+        if (est.parada_asignada !== parada.nombre || est.estado !== 'activo') return false;
+        
+        // Extraer hora de los horarios
+        const idaHour = est.horario_ida?.split(':')[0];
+        const regresoHour = est.horario_regreso?.split(':')[0];
+        const horaTarget = hora.split(':')[0];
+        
+        return idaHour === horaTarget || regresoHour === horaTarget;
+      }).length;
+      
+      const saturacion = parada.capacidad > 0 ? Math.round((estudiantesEnHora / parada.capacidad) * 100) : 0;
+      filaParada[hora] = saturacion;
+    });
+    
+    matriceSaturacion.push(filaParada);
+  });
+
+  // Función para obtener color según saturación
+  const getHeatmapColor = (saturacion: number) => {
+    if (saturacion >= 85) return '#dc2626'; // Rojo
+    if (saturacion >= 70) return '#f97316'; // Naranja
+    if (saturacion >= 50) return '#eab308'; // Ámbar
+    if (saturacion >= 30) return '#84cc16'; // Lima
+    return '#22c55e'; // Verde
+  };
 
   if (loading) {
     return (
@@ -454,6 +518,131 @@ export function Dashboard() {
               <Bar dataKey="uso" fill="#34d399" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* NUEVAS GRÁFICAS ANALÍTICAS */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Rentabilidad por Ruta */}
+        <div className="bg-white rounded-lg shadow-md p-6 border border-blue-100">
+          <h2 className="text-xl font-semibold text-blue-800 mb-4">💰 Rentabilidad por Ruta</h2>
+          {rentabilidadPorRuta.length > 0 ? (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {rentabilidadPorRuta.map((ruta, idx) => {
+                const margenColor = 
+                  ruta.margen >= 30 ? 'from-green-100 to-green-50 border-green-300' :
+                  ruta.margen >= 15 ? 'from-amber-100 to-amber-50 border-amber-300' :
+                  'from-red-100 to-red-50 border-red-300';
+
+                const margenBgColor =
+                  ruta.margen >= 30 ? 'bg-green-100 text-green-800' :
+                  ruta.margen >= 15 ? 'bg-amber-100 text-amber-800' :
+                  'bg-red-100 text-red-800';
+
+                return (
+                  <div key={ruta.ruta} className={`bg-gradient-to-r ${margenColor} p-4 rounded-lg border-l-4`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-bold text-gray-800">{ruta.ruta}</h3>
+                      <span className={`text-sm font-bold px-3 py-1 rounded-full ${margenBgColor}`}>
+                        {ruta.margen > 0 ? '+' : ''}{ruta.margen}%
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <p className="text-gray-600">Ingresos</p>
+                        <p className="font-bold text-gray-800">${ruta.ingresos.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Costos</p>
+                        <p className="font-bold text-gray-800">${ruta.costos.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Ganancia</p>
+                        <p className={`font-bold ${ruta.ganancia > 0 ? 'text-green-800' : 'text-red-800'}`}>
+                          ${ruta.ganancia.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-96 text-gray-500">
+              No hay datos de rutas disponibles
+            </div>
+          )}
+        </div>
+
+        {/* Matriz de Saturación Parada/Hora */}
+        <div className="bg-white rounded-lg shadow-md p-6 border border-red-100">
+          <h2 className="text-xl font-semibold text-red-800 mb-4">🔥 Matriz de Saturación (Parada/Hora)</h2>
+          <div className="overflow-x-auto">
+            <div className="inline-block min-w-full">
+              {/* Header con horas */}
+              <div className="flex mb-2">
+                <div className="w-32 flex-shrink-0 font-bold text-sm text-gray-700 p-2">Parada</div>
+                {horasPico.map(hora => (
+                  <div key={`header-${hora}`} className="w-12 flex-shrink-0 text-center font-bold text-xs text-gray-700 p-1">
+                    {hora}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Filas de paradas */}
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {matriceSaturacion.map((fila, idx) => (
+                  <div key={`row-${idx}`} className="flex">
+                    <div className="w-32 flex-shrink-0 text-xs text-gray-800 p-2 truncate font-medium">
+                      {fila.parada}
+                    </div>
+                    {horasPico.map(hora => {
+                      const saturacion = fila[hora] || 0;
+                      const color = getHeatmapColor(saturacion);
+                      return (
+                        <div
+                          key={`${fila.parada}-${hora}`}
+                          className="w-12 flex-shrink-0 p-1"
+                        >
+                          <div
+                            className="w-full h-8 rounded flex items-center justify-center text-xs font-bold text-white transition-all hover:scale-110"
+                            style={{ backgroundColor: color }}
+                            title={`${saturacion}% - ${fila.parada} a ${hora}`}
+                          >
+                            {saturacion}%
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* Leyenda */}
+          <div className="mt-4 flex items-center justify-center space-x-4 text-xs">
+            <div className="flex items-center space-x-1">
+              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#22c55e' }}></div>
+              <span>&lt;30%</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#84cc16' }}></div>
+              <span>30-50%</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#eab308' }}></div>
+              <span>50-70%</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#f97316' }}></div>
+              <span>70-85%</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#dc2626' }}></div>
+              <span>≥85%</span>
+            </div>
+          </div>
         </div>
       </div>
 
