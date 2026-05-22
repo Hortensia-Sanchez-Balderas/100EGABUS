@@ -56,8 +56,38 @@ export function Incidents() {
   const totalCost = incidents.reduce((sum, inc) => sum + (inc.costo_estimado || 0), 0);
   const pendingIncidents = incidents.filter(inc => inc.estado_resolucion === 'pendiente').length;
   const resolvedIncidents = incidents.filter(inc => inc.estado_resolucion === 'resuelto').length;
-  const highPriority = incidents.length; // Todos son potencialmente de alta prioridad
   const processingIncidents = incidents.filter(inc => inc.estado_resolucion === 'en_proceso').length;
+  
+  // Calculate additional metrics
+  const avgCostPerIncident = incidents.length > 0 ? Math.round(totalCost / incidents.length) : 0;
+  
+  // Parse inactividad time to calculate average
+  const inactiveTimes = incidents
+    .filter(inc => inc.tiempo_inactividad)
+    .map(inc => {
+      const match = inc.tiempo_inactividad?.match(/(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    });
+  const avgDowntime = inactiveTimes.length > 0
+    ? Math.round(inactiveTimes.reduce((a, b) => a + b, 0) / inactiveTimes.length)
+    : 0;
+  
+  // Calculate maintenance urgency
+  const maintenanceRequired = incidents.filter(inc => inc.requiere_mantenimiento).length;
+  
+  // Calculate incident types distribution
+  const typeDistribution = ['ponchadura', 'falla_mecanica', 'retraso', 'trafico', 'accidente_menor'].map(tipo => ({
+    tipo,
+    count: incidents.filter(inc => inc.tipo === tipo).length,
+    cost: incidents.filter(inc => inc.tipo === tipo).reduce((sum, inc) => sum + (inc.costo_estimado || 0), 0)
+  }));
+  
+  // Find highest cost incident type
+  const highestCostType = typeDistribution.reduce((prev, current) => 
+    prev.cost > current.cost ? prev : current, typeDistribution[0]);
+  
+  // Calculate resolution percentage
+  const resolutionPercentage = incidents.length > 0 ? Math.round((resolvedIncidents / incidents.length) * 100) : 0;
 
   const getTypeIcon = (tipo: string) => {
     switch (tipo) {

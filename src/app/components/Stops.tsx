@@ -150,6 +150,28 @@ export function Stops() {
   const totalCapacity = stops.reduce((sum, stop) => sum + stop.capacidad, 0);
   const totalUsers = stops.reduce((sum, stop) => sum + (stop.usuarios_activos || 0), 0);
   const avgOccupancy = totalCapacity > 0 ? (totalUsers / totalCapacity * 100) : 0;
+  
+  // Calculate additional metrics
+  const activeStops = stops.filter(s => s.estado === 'activa').length;
+  const inactiveStops = stops.filter(s => s.estado === 'inactiva').length;
+  
+  // Calculate utilization rate per stop
+  const stopUtilization = stops.map(stop => ({
+    nombre: stop.nombre,
+    utilization: stop.capacidad > 0 ? Math.round(((stop.usuarios_activos || 0) / stop.capacidad) * 100) : 0,
+    usuarios: stop.usuarios_activos || 0,
+    capacidad: stop.capacidad
+  }));
+  
+  // Stops with high utilization (>80%)
+  const highUtilizationStops = stopUtilization.filter(s => s.utilization > 80).length;
+  
+  // Find most and least utilized stops
+  const mostUtilizedStop = stopUtilization.reduce((prev, current) => 
+    prev.utilization > current.utilization ? prev : current, stopUtilization[0]);
+  
+  const leastUtilizedStop = stopUtilization.reduce((prev, current) => 
+    prev.utilization < current.utilization ? prev : current, stopUtilization[0]);
 
   return (
     <div className="space-y-6">

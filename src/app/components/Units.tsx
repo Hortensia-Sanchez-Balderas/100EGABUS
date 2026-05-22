@@ -49,6 +49,34 @@ export function Units() {
   const maintenanceUnits = units.filter(u => u.estado === 'mantenimiento').length;
   const outOfServiceUnits = units.filter(u => u.estado === 'fuera_servicio').length;
   const totalCapacity = units.reduce((sum, u) => sum + u.capacidad, 0);
+  
+  // Calculate maintenance metrics
+  const today = new Date();
+  const maintenanceOverdue = units.filter(u => {
+    if (!u.proximo_mantenimiento) return false;
+    const maintenanceDate = new Date(u.proximo_mantenimiento);
+    return maintenanceDate < today;
+  }).length;
+  
+  // Average kilometers
+  const avgKilometers = units.length > 0 ? Math.round(units.reduce((sum, u) => sum + u.kilometraje, 0) / units.length) : 0;
+  
+  // Total kilometers
+  const totalKilometers = units.reduce((sum, u) => sum + u.kilometraje, 0);
+  
+  // Average rendimiento (fuel efficiency)
+  const avgFuelEfficiency = units.length > 0 
+    ? (units.reduce((sum, u) => sum + (u.rendimiento || 0), 0) / units.length).toFixed(1)
+    : '0.0';
+  
+  // Units needing attention (maintenance overdue or high mileage)
+  const unitsNeedingAttention = units.filter(u => {
+    const maintenanceDate = u.proximo_mantenimiento ? new Date(u.proximo_mantenimiento) : new Date();
+    return maintenanceDate < today || u.kilometraje > 50000; // Assuming 50000 km threshold
+  }).length;
+  
+  // Fleet utilization (active vs total)
+  const fleetUtilization = units.length > 0 ? Math.round((activeUnits / units.length) * 100) : 0;
 
   const getStatusColor = (estado: string) => {
     switch (estado) {

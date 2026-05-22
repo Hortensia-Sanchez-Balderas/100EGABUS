@@ -60,6 +60,43 @@ export function Optimization() {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+  
+  // Calculate optimization metrics
+  const activeRules = optimizationRules.filter(r => r.estado === 'activa').length;
+  const suggestedRules = optimizationRules.filter(r => r.estado === 'sugerencia').length;
+  const implementedRules = optimizationRules.filter(r => r.estado === 'implementada').length;
+  
+  // Calculate potential savings (estimated: 5% per rule for efficiency, 10% for capacity/demand)
+  const potentialSavings = optimizationRules
+    .filter(r => r.estado !== 'implementada')
+    .reduce((total, rule) => {
+      const savingsMultiplier = rule.tipo === 'eficiencia' ? 0.05 : 0.10;
+      return total + (1000 * savingsMultiplier); // Base 1000 MXN per rule
+    }, 0);
+  
+  // Calculate average implementation time for rules
+  const implementedWithDates = optimizationRules.filter(r => 
+    r.estado === 'implementada' && r.fecha_implementacion && r.fecha_generacion
+  );
+  
+  const avgImplementationTime = implementedWithDates.length > 0
+    ? Math.round(
+        implementedWithDates.reduce((sum, rule) => {
+          const generationDate = new Date(rule.fecha_generacion);
+          const implementationDate = new Date(rule.fecha_implementacion!);
+          const daysToImplement = Math.ceil((implementationDate.getTime() - generationDate.getTime()) / (1000 * 3600 * 24));
+          return sum + daysToImplement;
+        }, 0) / implementedWithDates.length
+      )
+    : 0;
+  
+  // Calculate success rate (implemented vs suggested)
+  const successRate = optimizationRules.length > 0
+    ? Math.round((implementedRules / optimizationRules.length) * 100)
+    : 0;
+  
+  // High priority rules
+  const highPriorityRules = optimizationRules.filter(r => r.prioridad === 'alta').length;
 
   const getTypeIcon = (tipo: string) => {
     switch (tipo) {

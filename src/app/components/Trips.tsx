@@ -51,8 +51,32 @@ export function Trips() {
   const filteredTrips = trips;
   const completedTrips = trips.length;
   const delayedTrips = trips.filter(t => (t.retraso || 0) > 15).length;
+  const onTimeTrips = trips.filter(t => (t.retraso || 0) <= 15).length;
   const totalPassengers = trips.reduce((sum, t) => sum + (t.pasajeros || 0), 0);
   const totalFuel = trips.reduce((sum, t) => sum + (t.gasolina_consumida || 0), 0);
+  
+  // Calculate performance metrics
+  const onTimePerformance = completedTrips > 0 ? Math.round((onTimeTrips / completedTrips) * 100) : 0;
+  const avgDelay = completedTrips > 0 
+    ? Math.round(trips.reduce((sum, t) => sum + (t.retraso || 0), 0) / completedTrips)
+    : 0;
+  
+  const avgPassengersPerTrip = completedTrips > 0 ? Math.round(totalPassengers / completedTrips) : 0;
+  
+  // Calculate median delay
+  const delays = trips.map(t => t.retraso || 0).sort((a, b) => a - b);
+  const medianDelay = delays.length > 0
+    ? delays.length % 2 === 0
+      ? (delays[delays.length / 2 - 1] + delays[delays.length / 2]) / 2
+      : delays[Math.floor(delays.length / 2)]
+    : 0;
+  
+  // Calculate fuel efficiency (L per trip)
+  const fuelEfficiency = completedTrips > 0 ? (totalFuel / completedTrips).toFixed(1) : '0.0';
+  
+  // Calculate cost per passenger (estimated: 25 MXN per liter fuel)
+  const fuelCost = totalFuel * 25;
+  const costPerPassenger = totalPassengers > 0 ? (fuelCost / totalPassengers).toFixed(2) : '0.00';
 
   const getStatusColor = (retraso: number) => {
     if (retraso > 15) return 'bg-red-100 text-red-800';

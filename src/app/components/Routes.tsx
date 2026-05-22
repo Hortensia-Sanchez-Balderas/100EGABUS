@@ -17,6 +17,7 @@ interface Route {
 
 export function Routes() {
   const [routes, setRoutes] = useState<Route[]>([]);
+  const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,17 +27,24 @@ export function Routes() {
   const loadRoutes = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: routesData, error: routesError } = await supabase
         .from('rutas')
         .select('*')
         .order('nombre', { ascending: true });
 
-      if (error) {
-        console.error('Error loading routes:', error);
-        alert('Error al cargar rutas: ' + error.message);
+      if (routesError) {
+        console.error('Error loading routes:', routesError);
+        alert('Error al cargar rutas: ' + routesError.message);
       } else {
-        setRoutes(data || []);
+        setRoutes(routesData || []);
       }
+      
+      // Load trips to calculate efficiency
+      const { data: tripsData } = await supabase
+        .from('viajes')
+        .select('ruta, retraso, pasajeros, gasolina_consumida');
+      
+      setTrips(tripsData || []);
     } catch (error) {
       console.error('Error loading routes:', error);
       alert('Error al cargar rutas');
@@ -48,6 +56,33 @@ export function Routes() {
   const activeRoutes = routes.filter(r => r.estado === 'activa').length;
   const totalDistance = routes.reduce((sum, r) => sum + (r.distancia || 0), 0);
   const avgTime = routes.length > 0 ? routes.reduce((sum, r) => sum + (r.tiempo_estimado || 0), 0) / routes.length : 0;
+  
+  // Calculate route efficiency metrics
+  const routeEfficiency = routes.map(route => {
+    const routeTrips = trips.filter(t => t.ruta === route.nombre);
+    const onTimeTrips = routeTrips.filter(t => (t.retraso || 0) <= 15).length;
+    const efficiency = routeTrips.length > 0 ? Math.round((onTimeTrips / routeTrips.length) * 100) : 0;
+    const avgPassengers = routeTrips.length > 0 ? Math.round(routeTrips.reduce((sum, t) => sum + (t.pasajeros || 0), 0) / routeTrips.length) : 0;
+    
+    return {
+      nombre: route.nombre,
+      efficiency,
+      avgPassengers,
+      totalTrips: routeTrips.length
+    };
+  });
+  
+  // Find best and worst performing routes
+  const bestRoute = routeEfficiency.reduce((prev, current) => 
+    prev.efficiency > current.efficiency ? prev : current, routeEfficiency[0] || { efficiency: 0 });
+  
+  const worstRoute = routeEfficiency.reduce((prev, current) => 
+    prev.efficiency < current.efficiency ? prev : current, routeEfficiency[0] || { efficiency: 100 });
+  
+  // Average efficiency across all routes
+  const avgEfficiency = routeEfficiency.length > 0 
+    ? Math.round(routeEfficiency.reduce((sum, r) => sum + r.efficiency, 0) / routeEfficiency.length)
+    : 0;
 
   return (
     <div className="space-y-6">

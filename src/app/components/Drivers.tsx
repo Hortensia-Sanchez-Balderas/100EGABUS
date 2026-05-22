@@ -19,6 +19,7 @@ interface Driver {
 
 export function Drivers() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,17 +29,24 @@ export function Drivers() {
   const loadDrivers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: driversData, error: driversError } = await supabase
         .from('choferes')
         .select('*')
         .order('nombre', { ascending: true });
 
-      if (error) {
-        console.error('Error loading drivers:', error);
-        alert('Error al cargar choferes: ' + error.message);
+      if (driversError) {
+        console.error('Error loading drivers:', driversError);
+        alert('Error al cargar choferes: ' + driversError.message);
       } else {
-        setDrivers(data || []);
+        setDrivers(driversData || []);
       }
+      
+      // Load trips to calculate performance metrics
+      const { data: tripsData } = await supabase
+        .from('viajes')
+        .select('chofer, retraso, pasajeros, gasolina_consumida');
+      
+      setTrips(tripsData || []);
     } catch (error) {
       console.error('Error loading drivers:', error);
       alert('Error al cargar choferes');
@@ -50,6 +58,47 @@ export function Drivers() {
   const activeDrivers = drivers.filter(d => d.estado === 'activo').length;
   const totalTripsPerDay = drivers.reduce((sum, d) => sum + d.vueltas_por_dia, 0);
   const avgTripsPerDriver = drivers.length > 0 ? totalTripsPerDay / drivers.length : 0;
+  
+  // Calculate performance metrics
+  const driverPerformance = drivers.map(driver => {
+    const driverTrips = trips.filter(t => t.chofer === driver.nombre);
+    const onTimeTrips = driverTrips.filter(t => (t.retraso || 0) <= 15).length;
+    const efficiency = driverTrips.length > 0 ? Math.round((onTimeTrips / driverTrips.length) * 100) : 100;
+    const avgPassengers = driverTrips.length > 0 ? Math.round(driverTrips.reduce((sum, t) => sum + (t.pasajeros || 0), 0) / driverTrips.length) : 0;
+    
+    return {
+      nombre: driver.nombre,
+      efficiency,
+      avgPassengers,
+      totalTrips: driverTrips.length,
+      avgDelay: driverTrips.length > 0 
+        ? Math.round(driverTrips.reduce((sum, t) => sum + (t.retraso || 0), 0) / driverTrips.length)
+        : 0
+    };
+  });
+  
+  // Find best performing driver
+  const bestDriver = driverPerformance.reduce((prev, current) => 
+    prev.efficiency > current.efficiency ? prev : current, driverPerformance[0] || { efficiency: 0 });
+  
+  // Calculate experience categories
+  const experienceLevels = {
+    junior: drivers.filter(d => d.experiencia?.toLowerCase().includes('junior') || d.experiencia === '0-2').length,
+    senior: drivers.filter(d => d.experiencia?.toLowerCase().includes('senior') || d.experiencia?.includes('5+')).length,
+    other: drivers.length - (drivers.filter(d => d.experiencia?.toLowerCase().includes('junior') || d.experiencia?.toLowerCase().includes('senior')).length)
+  };
+  
+  // Calculate turno distribution
+  const turnoDistribution = {
+    matutino: drivers.filter(d => d.turno === 'matutino').length,
+    vespertino: drivers.filter(d => d.turno === 'vespertino').length,
+    mixto: drivers.filter(d => d.turno === 'mixto').length
+  };
+  
+  // Average efficiency across all drivers
+  const avgEfficiency = driverPerformance.length > 0
+    ? Math.round(driverPerformance.reduce((sum, d) => sum + d.efficiency, 0) / driverPerformance.length)
+    : 100;
 
   const getStatusColor = (estado: string) => {
     switch (estado) {
