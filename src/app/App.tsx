@@ -12,6 +12,8 @@ import { Trips } from './components/Trips';
 import { Incidents } from './components/Incidents';
 import { Reports } from './components/Reports';
 import { Optimization } from './components/Optimization';
+import { Maintenance } from './components/maintenance/Maintenance';
+import { OperatorMaintenance } from './components/maintenance/OperatorMaintenance';
 import { Users as UsersManagement } from './components/Users';
 import { OperatorWelcome } from './components/operator/OperatorWelcome';
 import { OperatorTrips } from './components/operator/OperatorTrips';
@@ -19,8 +21,8 @@ import { OperatorIncidents } from './components/operator/OperatorIncidents';
 import { OperatorRoutes } from './components/operator/OperatorRoutes';
 import { OperatorUnits } from './components/operator/OperatorUnits';
 
-type AdminView = 'dashboard' | 'students' | 'stops' | 'routes' | 'units' | 'drivers' | 'trips' | 'incidents' | 'reports' | 'optimization' | 'users';
-type OperatorView = 'welcome' | 'trips' | 'incidents' | 'routes' | 'units';
+type AdminView = 'dashboard' | 'students' | 'stops' | 'routes' | 'units' | 'drivers' | 'trips' | 'incidents' | 'reports' | 'optimization' | 'users'| 'maintenance';
+type OperatorView = 'welcome' | 'trips' | 'incidents' | 'routes' | 'units'| 'maintenance';
 type UserRole = 'admin' | 'operator' | null;
 
 export default function App() {
@@ -114,6 +116,8 @@ export default function App() {
         return <Dashboard />;
       case 'students':
         return <Students />;
+      case 'maintenance':
+        return <Maintenance />;
       case 'stops':
         return <Stops />;
       case 'routes':
@@ -147,6 +151,8 @@ export default function App() {
         return <OperatorIncidents />;
       case 'routes':
         return <OperatorRoutes />;
+      case 'maintenance':
+        return <OperatorMaintenance />;
       case 'units':
         return <OperatorUnits />;
       default:
@@ -166,6 +172,7 @@ export default function App() {
     { id: 'reports' as AdminView, label: 'Reportes', icon: FileText },
     { id: 'optimization' as AdminView, label: 'Optimización', icon: Zap },
     { id: 'users' as AdminView, label: 'Usuarios', icon: Shield },
+    { id: 'maintenance' as AdminView, label: 'Mantenimiento', icon: Wrench },
   ];
 
   const operatorMenuItems = [
@@ -174,6 +181,7 @@ export default function App() {
     { id: 'incidents' as OperatorView, label: 'Registro de Incidencias', icon: AlertTriangle },
     { id: 'routes' as OperatorView, label: 'Consulta de Rutas', icon: Route },
     { id: 'units' as OperatorView, label: 'Consulta de Unidades', icon: Bus },
+    { id: 'maintenance' as OperatorView, label: 'Mantenimiento', icon: Wrench },
   ];
 
   const menuItems = userRole === 'admin' ? adminMenuItems : operatorMenuItems;
