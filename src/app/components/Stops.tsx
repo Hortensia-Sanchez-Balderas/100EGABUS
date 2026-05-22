@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { MapPin, Plus, Edit2, Trash2, Users, Clock } from 'lucide-react';
+import { MapPin, Plus, Edit2, Trash2, Users, Clock, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 
+
+interface Student {
+  id: string;
+  nombre: string;
+  escuela: string;
+  horario_ida: string;
+  horario_regreso: string;
+  estado: string;
+}
 
 interface Stop {
   id: string;
@@ -11,7 +20,11 @@ interface Stop {
   ruta: string;
   capacidad: number;
   estado: 'activa' | 'inactiva';
-  usuarios_activos?: number;
+  total_estudiantes?: number;
+  saturacion_porcentaje?: number;
+  estudiantes?: Student[];
+  horarios_pico?: { ida: string; regreso: string };
+  escuelas?: string[];
 }
 
 export function Stops() {
@@ -19,6 +32,7 @@ export function Stops() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingStop, setEditingStop] = useState<Stop | null>(null);
+  const [expandedStop, setExpandedStop] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -35,6 +49,29 @@ export function Stops() {
   const loadStops = async () => {
     setLoading(true);
     try {
+      // Consultar la vista dinámica
+      const { data, error } = await supabase
+        .from('vista_paradas_estudiantes')
+        .select('*')
+        .order('nombre', { ascending: true });
+
+      if (error) {
+        // Si la vista no existe, usar consulta tradicional como fallback
+        console.warn('Vista no encontrada, usando consulta alternativa:', error);
+        await loadStopsAlternative();
+      } else {
+        setStops(data || []);
+      }
+    } catch (error) {
+      console.error('Error loading stops:', error);
+      await loadStopsAlternative();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStopsAlternative = async () => {
+    try {
       const { data: paradasData, error: paradasError } = await supabase
         .from('paradas')
         .select('*')
@@ -46,23 +83,31 @@ export function Stops() {
       } else {
         const { data: estudiantesData } = await supabase
           .from('estudiantes')
-          .select('parada_asignada')
+          .select('*')
           .eq('estado', 'activo');
 
-        const stopsWithUsers = (paradasData || []).map(parada => {
-          const usuariosActivos = (estudiantesData || []).filter(
+        const stopsWithData = (paradasData || []).map(parada => {
+          const paradaStudents = (estudiantesData || []).filter(
             est => est.parada_asignada === parada.nombre
-          ).length;
-          return { ...parada, usuarios_activos: usuariosActivos };
+          );
+          
+          const saturacion = parada.capacidad > 0 
+            ? Math.round((paradaStudents.length / parada.capacidad) * 100)
+            : 0;
+
+          return {
+            ...parada,
+            total_estudiantes: paradaStudents.length,
+            saturacion_porcentaje: saturacion,
+            estudiantes: paradaStudents
+          };
         });
 
-        setStops(stopsWithUsers);
+        setStops(stopsWithData);
       }
     } catch (error) {
       console.error('Error loading stops:', error);
       alert('Error al cargar paradas');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -148,7 +193,7 @@ export function Stops() {
   };
 
   const totalCapacity = stops.reduce((sum, stop) => sum + stop.capacidad, 0);
-  const totalUsers = stops.reduce((sum, stop) => sum + (stop.usuarios_activos || 0), 0);
+  const totalUsers = stops.reduce((sum, stop) => sum + (stop.total_estudiantes || 0), 0);
   const avgOccupancy = totalCapacity > 0 ? (totalUsers / totalCapacity * 100) : 0;
   
   // Calculate additional metrics
@@ -158,8 +203,8 @@ export function Stops() {
   // Calculate utilization rate per stop
   const stopUtilization = stops.map(stop => ({
     nombre: stop.nombre,
-    utilization: stop.capacidad > 0 ? Math.round(((stop.usuarios_activos || 0) / stop.capacidad) * 100) : 0,
-    usuarios: stop.usuarios_activos || 0,
+    utilization: stop.capacidad > 0 ? Math.round(((stop.total_estudiantes || 0) / stop.capacidad) * 100) : 0,
+    usuarios: stop.total_estudiantes || 0,
     capacidad: stop.capacidad
   }));
   
@@ -172,6 +217,9 @@ export function Stops() {
   
   const leastUtilizedStop = stopUtilization.reduce((prev, current) => 
     prev.utilization < current.utilization ? prev : current, stopUtilization[0]);
+  
+  // Saturated stops (>85%)
+  const saturatedStops = stops.filter(s => (s.saturacion_porcentaje || 0) > 85);
 
   return (
     <div className="space-y-6">
@@ -298,76 +346,159 @@ export function Stops() {
           No hay paradas registradas
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {stops.map((stop) => (
-          <div key={stop.id} className="bg-white rounded-lg shadow-md border border-emerald-100 overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2 text-white">
-                  <MapPin className="w-6 h-6" />
-                  <h3 className="text-xl font-bold">{stop.nombre}</h3>
-                </div>
-                <span className="bg-white text-emerald-700 px-3 py-1 rounded-full text-xs font-medium">
-                  {stop.ruta}
-                </span>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+          {stops.map((stop) => {
+            const saturationLevel = stop.saturacion_porcentaje || 0;
+            const saturationColor = 
+              saturationLevel > 85 ? 'from-red-500 to-red-600' :
+              saturationLevel > 70 ? 'from-amber-500 to-amber-600' :
+              'from-green-500 to-green-600';
 
-            <div className="p-6 space-y-4">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Ubicación</p>
-                <p className="text-gray-800 font-medium">{stop.ubicacion}</p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Coordenadas</p>
-                <p className="text-gray-800 font-mono text-sm">{stop.coordenadas}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Usuarios Activos</p>
-                  <p className="text-2xl font-bold text-emerald-700">{stop.usuarios_activos || 0}</p>
+            return (
+              <div key={stop.id} className="bg-white rounded-lg shadow-md border border-emerald-100 overflow-hidden hover:shadow-lg transition-shadow">
+                {/* Header con saturación */}
+                <div className={`bg-gradient-to-r ${saturationColor} p-4`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-2 text-white">
+                      <MapPin className="w-6 h-6" />
+                      <h3 className="text-lg font-bold">{stop.nombre}</h3>
+                    </div>
+                    <span className={`${saturationLevel > 85 ? 'animate-pulse' : ''} bg-white text-gray-800 px-3 py-1 rounded-full text-xs font-bold`}>
+                      {saturationLevel}% Saturado
+                    </span>
+                  </div>
+                  <div className="w-full bg-white bg-opacity-20 rounded-full h-2">
+                    <div
+                      className="bg-white h-2 rounded-full transition-all"
+                      style={{ width: `${saturationLevel}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Capacidad</p>
-                  <p className="text-2xl font-bold text-emerald-700">{stop.capacidad}</p>
-                </div>
-              </div>
 
-              <div className="bg-emerald-50 rounded-lg p-3">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-emerald-700">Ocupación</span>
-                  <span className="text-sm font-bold text-emerald-700">
-                    {(((stop.usuarios_activos || 0) / stop.capacidad) * 100).toFixed(0)}%
-                  </span>
-                </div>
-                <div className="w-full bg-emerald-200 rounded-full h-2">
-                  <div
-                    className="bg-emerald-600 h-2 rounded-full transition-all"
-                    style={{ width: `${((stop.usuarios_activos || 0) / stop.capacidad) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
+                <div className="p-5 space-y-4">
+                  {/* Ubicación */}
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Ubicación</p>
+                    <p className="text-gray-800 font-medium text-sm">{stop.ubicacion || 'N/A'}</p>
+                  </div>
 
-              <div className="flex space-x-2 pt-2">
-                <button
-                  onClick={() => handleEditStop(stop)}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg flex items-center justify-center space-x-1 transition-colors"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  <span>Editar</span>
-                </button>
-                <button
-                  onClick={() => handleDeleteStop(stop.id)}
-                  className="px-4 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                  {/* Capacidad y Usuarios */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                      <p className="text-xs text-gray-600 mb-1">Usuarios</p>
+                      <p className="text-2xl font-bold text-emerald-700">{stop.total_estudiantes || 0}</p>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-3 text-center">
+                      <p className="text-xs text-gray-600 mb-1">Capacidad</p>
+                      <p className="text-2xl font-bold text-blue-700">{stop.capacidad}</p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-3 text-center">
+                      <p className="text-xs text-gray-600 mb-1">Ruta</p>
+                      <p className="text-sm font-bold text-purple-700">{stop.ruta || 'N/A'}</p>
+                    </div>
+                  </div>
+
+                  {/* Horarios Pico */}
+                  {stop.horarios_pico && (stop.horarios_pico.ida || stop.horarios_pico.regreso) && (
+                    <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                      <p className="text-xs font-semibold text-amber-800 mb-2">🕐 Horarios Pico</p>
+                      <div className="flex justify-between text-xs">
+                        {stop.horarios_pico.ida && (
+                          <div>
+                            <p className="text-gray-600">Ida</p>
+                            <p className="font-bold text-amber-700">{stop.horarios_pico.ida}</p>
+                          </div>
+                        )}
+                        {stop.horarios_pico.regreso && (
+                          <div>
+                            <p className="text-gray-600">Regreso</p>
+                            <p className="font-bold text-amber-700">{stop.horarios_pico.regreso}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Escuelas */}
+                  {stop.escuelas && stop.escuelas.length > 0 && (
+                    <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                      <p className="text-xs font-semibold text-purple-800 mb-2">🏫 Escuelas</p>
+                      <div className="flex flex-wrap gap-2">
+                        {stop.escuelas.slice(0, 3).map((escuela, idx) => (
+                          <span key={idx} className="text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded">
+                            {escuela}
+                          </span>
+                        ))}
+                        {stop.escuelas.length > 3 && (
+                          <span className="text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded">
+                            +{stop.escuelas.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Botón expandir estudiantes */}
+                  {stop.estudiantes && stop.estudiantes.length > 0 && (
+                    <button
+                      onClick={() => setExpandedStop(expandedStop === stop.id ? null : stop.id)}
+                      className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 py-2 rounded-lg flex items-center justify-between transition-colors text-sm font-medium"
+                    >
+                      <span>📋 Ver {stop.estudiantes.length} estudiantes</span>
+                      {expandedStop === stop.id ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Lista expandible de estudiantes */}
+                  {expandedStop === stop.id && stop.estudiantes && stop.estudiantes.length > 0 && (
+                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 max-h-48 overflow-y-auto">
+                      <div className="space-y-2">
+                        {stop.estudiantes.map((student, idx) => (
+                          <div key={student.id} className="bg-white p-2 rounded border-l-4 border-emerald-400">
+                            <p className="text-xs font-semibold text-gray-800">{student.nombre}</p>
+                            <p className="text-xs text-gray-600">{student.escuela}</p>
+                            <p className="text-xs text-gray-500">{student.horario_ida} - {student.horario_regreso}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Alertas de saturación */}
+                  {saturationLevel > 85 && (
+                    <div className="bg-red-50 rounded-lg p-3 border border-red-200 flex items-start space-x-2">
+                      <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-xs font-semibold text-red-800">Parada Saturada</p>
+                        <p className="text-xs text-red-700 mt-1">Se recomienda aumentar capacidad o crear ruta alternativa</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Botones de acción */}
+                  <div className="flex space-x-2 pt-2">
+                    <button
+                      onClick={() => handleEditStop(stop)}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg flex items-center justify-center space-x-1 transition-colors text-sm"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      <span>Editar</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteStop(stop.id)}
+                      className="px-4 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
